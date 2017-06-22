@@ -1,8 +1,6 @@
 package go.chilan.server;
 
-import java.io.ObjectOutputStream;
-import java.sql.Connection;
-import java.sql.SQLException;
+import java.util.Date;
 
 import javax.mail.MessagingException;
 
@@ -10,16 +8,25 @@ import com.graphhopper.chilango.network.ConnectionMessage;
 import com.graphhopper.chilango.network.EasyCrypt;
 import com.graphhopper.chilango.network.ServerConnection;
 import com.graphhopper.chilango.network.ServerMessageAuth;
+import com.mongodb.MongoClient;
+import com.mongodb.client.MongoDatabase;
 import com.graphhopper.chilango.network.ConnectionMessage.ConnectionInformation;
 
 public class DBHelper {
 
-	private Connection connection;
-	
-	private int userId=-1;
+	private MongoClient connection;
+	private MongoDatabase db;
 
-	public DBHelper(Connection connection) {
+	private String userId = null;
+
+	public DBHelper(MongoClient connection) {
 		this.connection = connection;
+		db = MongoDB.getChilangoDatabase(connection);
+	}
+
+	public DBHelper() {
+		this.connection = MongoDB.createDatabaseConnection();
+		db = MongoDB.getChilangoDatabase(connection);
 	}
 
 	public ConnectionMessage createUser(ServerMessageAuth auth) throws Exception {
@@ -33,12 +40,12 @@ public class DBHelper {
 			return new ConnectionMessage(ConnectionInformation.ERROR, "Password has to be longer than 6 signs");
 		else {
 			try {
-				DBConnector.createUser(connection, auth.getUser(), auth.getMail(), auth.getPw());
+				MongoDB.createUser(db, auth.getUser(), auth.getMail(), auth.getPw());
 				return new ConnectionMessage(ConnectionInformation.VERFIY_MAIL, "Verify your mail");
-			} catch (SQLException e) {
-				return new ConnectionMessage(ConnectionInformation.ERROR, "Try another name or mail");
 			} catch (MessagingException e) {
 				return new ConnectionMessage(ConnectionInformation.ERROR, "We could not write you a mail");
+			} catch (Exception e) {
+				return new ConnectionMessage(ConnectionInformation.ERROR, "User already created");
 			}
 		}
 	}
@@ -54,40 +61,36 @@ public class DBHelper {
 			if (auth.getPw().trim().equals("") || auth.getPw().length() < 7)
 				return new ConnectionMessage(ConnectionInformation.ERROR, "Password has to be longer than 6 signs");
 			else
-				return DBConnector.loginUser(connection, auth.getMail(), auth.getPw());
+				return MongoDB.loginUser(db, auth.getMail(), auth.getPw());
 		} else if (auth.getInformation() == ConnectionInformation.LOG_IN_TOKEN) {
-			return DBConnector.prooveToken(auth.getAuth(), auth.getMail());
+			return MongoDB.prooveToken(auth.getAuth(), auth.getMail());
 		} else {
 			return null;
 		}
 	}
-	
-	public int getUserId(String mail){
-		if(userId!=-1)
+
+	public String getUserId(String mail) {
+		if (userId != null)
 			return userId;
 		else
-			userId=DBConnector.getUserId(connection, mail);
-		
+			userId = MongoDB.getUserId(db, mail);
+
 		return userId;
 	}
-	
-	public long addTransaction(String path,int type) throws SQLException, MessagingException{
-		
-		return DBConnector.addTransactoin(connection, path, type, userId);
+
+	public long addTransaction(String path, int type, String userId, int routeId, Date creationTIme)
+			throws MessagingException {
+
+		return MongoDB.addTransaction(db, path, type, userId, routeId, creationTIme);
 	}
-	
 
 	public boolean validateMail(String conf) {
-		int user = DBConnector.idOfValueInDatabse(connection, "EMAIL_CONFIRMATION", "CONFIRMATION", conf);
-		System.out.println(conf+" "+user);
-		if (user > 0)
-		{
-			Boolean setToTrue=true;
-			DBConnector.updateValueInTableById(connection,"USERS","CONFIRMATION",setToTrue,user);
-			return true;
-		}
-			
-		return false;
 
+		return MongoDB.updateValueInTable(db, "users", "mail_confirmation", true, "mailConfirmationToken", conf);
+
+	}
+
+	public void close() {
+		connection.close();
 	}
 }

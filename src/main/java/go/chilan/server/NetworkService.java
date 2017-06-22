@@ -27,19 +27,21 @@ class NetworkService implements Runnable {
 		// running the confirmation Listener
 
 		try {
-		//	do{
-				System.out.println("waiting for connection :-)");
-				handler=new WorkHandler(serverSocket, ec);
-				handler.runTask();
-				System.out.println("connection accepted");
-		//	}while(true);
-			
-		} catch (IOException ex) {
-			closeDown();
+			// do{
+			System.out.println("waiting for connection :-)");
+			handler = new WorkHandler(serverSocket, ec);
+			handler.runTask();
+			System.out.println("connection accepted");
+			// }while(true);
+
+		} finally {
+			System.out.println("close down in NetworkService");
+			closeDown("from NetworkSize");
 		}
 	}
 
-	public void closeDown() {
+	public void closeDown(String origin) {
+		System.out.println("close down pool "+origin);
 		pool.shutdown(); // Disable new tasks from being submitted
 		try {
 			// Wait a while for existing tasks to terminate

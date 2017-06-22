@@ -1,6 +1,6 @@
 ----------------------------------------------------------------
-Mon Jun 19 16:27:28 CEST 2017:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.8.3.0 - (1405108): instance a816c00e-015c-c0c0-508d-0000066b7f38 
+Wed Jun 21 17:47:27 CEST 2017:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.8.3.0 - (1405108): instance a816c00e-015c-cb56-438d-000005f39e90 
 on database directory /Users/martinwurflein/Documents/workspace2017/ChilangoDB  with class loader sun.misc.Launcher$AppClassLoader@4554617c 
 Loaded from file:/Users/martinwurflein/.m2/repository/org/apache/derby/derby/10.8.3.0/derby-10.8.3.0.jar
 java.vendor=Oracle Corporation

@@ -19,26 +19,25 @@ public class LiveDataHandler {
 	synchronized public static void addValue(LiveRideUser ride) {
 		cleanValues(System.currentTimeMillis(), ride.getUserId());
 		live_rides.put(System.currentTimeMillis(), ride);
-		System.out.println(
-				System.currentTimeMillis() + " lat:" + ride.getLat() + "  lon:" + ride.getLon() + " "+live_rides.size());
+		System.out.println(System.currentTimeMillis() + " lat:" + ride.getLat() + "  lon:" + ride.getLon() + " "
+				+ live_rides.size());
 
 	}
 
-	synchronized private static void cleanValues(long time, int userId) {
-		
-		
-		 Iterator<Long> iterator = live_rides.keySet().iterator();
-		 while (iterator.hasNext()) {
-			 long value=iterator.next();
-				if (time - value > 3000 * 60) {
+	synchronized private static void cleanValues(long time, String userId) {
+
+		Iterator<Long> iterator = live_rides.keySet().iterator();
+		while (iterator.hasNext()) {
+			long value = iterator.next();
+			if (time - value > 3000 * 60) {
+				live_rides.remove(value);
+				// delete value
+			} else {
+				if (live_rides.get(value).getUserId().equals(userId)) {
 					live_rides.remove(value);
-					// delete value
-				} else {
-					if (live_rides.get(value).getUserId() == userId) {
-						live_rides.remove(value);
-					}
 				}
-		 }
+			}
+		}
 
 		lastCleaned = time;
 	}
@@ -51,11 +50,10 @@ public class LiveDataHandler {
 		rides.clear();
 
 		if (System.currentTimeMillis() - lastCleaned > 3 * 60 * 1000) {
-			cleanValues(System.currentTimeMillis(), 0);
+			cleanValues(System.currentTimeMillis(), "");
 		}
 
-		for(Long key:live_rides.keySet())
-		{
+		for (Long key : live_rides.keySet()) {
 			rides.add(live_rides.get(key));
 		}
 		lastRetrieved = System.currentTimeMillis();

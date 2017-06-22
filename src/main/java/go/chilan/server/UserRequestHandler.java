@@ -26,12 +26,12 @@ public class UserRequestHandler {
 
 	private DBHelper helper;
 	private ObjectInputStream inputStream;
-	private int user;
+	private String user;
 	private ObjectOutputStream outputStream;
 	private EasyCrypt cryption;
 	private String taskPath;
 
-	public UserRequestHandler(DBHelper helper, ObjectInputStream inputStream, ObjectOutputStream outputStream, int user,
+	public UserRequestHandler(DBHelper helper, ObjectInputStream inputStream, ObjectOutputStream outputStream, String user,
 			EasyCrypt cryption) {
 		this.helper = helper;
 		this.inputStream = inputStream;
@@ -60,8 +60,13 @@ public class UserRequestHandler {
 			// process
 			String path = (taskPath +"/"+ FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
 					+ task.getType() + "-" + user) + ".task";
-
-			Long transactionId = (long) helper.addTransaction(path, Constants.TRANSACTION_TASK);
+			
+			int routeId=0;
+			if(task instanceof RecordTask)
+			routeId=((RecordTask) task).getRoute().getId();
+			
+			
+			Long transactionId = (long) helper.addTransaction(path, Constants.TRANSACTION_TASK,user,routeId,new Date(task.getLastEdit()));
 
 			if (task instanceof GPSRecordTask) {
 				task = new GPSRecordTask((GPSRecordTask) task, System.currentTimeMillis(), transactionId);
@@ -77,6 +82,7 @@ public class UserRequestHandler {
 			FileHelper.writeCryptedObject(outputStream, cryption,
 					new RequestMessage(RequestType.TransactionConfrimation, transactionId));
 			return 0;
+			
 		case SubmitChange:
 
 			HashMap<String, ExplicitRouteMessage> taskMap = (HashMap<String, ExplicitRouteMessage>) request
@@ -90,7 +96,7 @@ public class UserRequestHandler {
 				path = (taskPath +"/"+ FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
 						+ currentTask.getType() + "-" + user) + ".explicit";
 
-				transactionId = (long) helper.addTransaction(path, Constants.TRANSACTION_MESSAGE);
+				transactionId = (long) helper.addTransaction(path, Constants.TRANSACTION_MESSAGE,user,currentTask.getRouteId(),new Date(currentTask.getTimestamp()));
 				System.out.println("new task saved to: " + transactionId);
 				// write object to folder
 				FileHelper.writeObject(new File(path), new ExplicitRouteMessage(currentTask, transactionId));

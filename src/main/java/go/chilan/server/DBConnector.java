@@ -1,6 +1,8 @@
 package go.chilan.server;
 
 import java.io.File;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -58,7 +60,7 @@ public class DBConnector {
 			// OK, we can trust this JWT
 
 		} catch (SignatureException e) {
-
+			e.printStackTrace();
 			// don't trust the JWT!#
 			return new ConnectionMessage(ConnectionInformation.WRONG_TOKEN, "signature Exception");
 		} catch (io.jsonwebtoken.ExpiredJwtException e) {
@@ -89,7 +91,7 @@ public class DBConnector {
 		System.out.println("file of app:"+(new File("")).getAbsolutePath());
 		System.out.println(file.getAbsolutePath()+" "+file.exists());
 		System.out.println((new File(file,"checkme")).getAbsolutePath()+" "+(new File(file,"checkme")).exists());
-		Connection c = DriverManager.getConnection(protocol + file.getAbsolutePath(), props);
+		Connection c = DriverManager.getConnection(protocol + file.getAbsolutePath()+";create=true", props);
 		return c;
 	}
 
@@ -119,7 +121,7 @@ public class DBConnector {
 			ResultSet rs = null;
 			Statement s = connection.createStatement();
 
-			rs = s.executeQuery("SELECT * FROM USERS WHERE MAIL = '" + mail + "' AND PW='" + pw + "'");
+			rs = s.executeQuery("SELECT * FROM USERS WHERE MAIL = '" + mail + "' AND PW='" + PWHash.generateStorngPasswordHash(pw) + "'");
 
 			if (!rs.next()) {
 				return new ConnectionMessage(ConnectionInformation.WRONG_LOGIN);
@@ -134,6 +136,14 @@ public class DBConnector {
 			}
 
 		} catch (SQLException e) {
+			e.printStackTrace();
+			return new ConnectionMessage(ConnectionInformation.ERROR);
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return new ConnectionMessage(ConnectionInformation.ERROR);
+		} catch (InvalidKeySpecException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 			return new ConnectionMessage(ConnectionInformation.ERROR);
 		}
@@ -214,7 +224,7 @@ public class DBConnector {
 
 	
 	// CREATE TABLE TRANSACTIONS (ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),PATH VARCHAR(50) NOT NULL,USERID INTEGER NOT NULL,TRANSACTION_TYPE INTEGER NOT NULL, DAY DATE NOT NULL, STATUS INTEGER NOT NULL, PRIMARY KEY (ID))
-	public static int addTransactoin(Connection connection,String path,int type,int userId)
+	public static int addTransaction(Connection connection,String path,int type,int userId)
 			throws SQLException, MessagingException {
 
 		String confirmation = "";
@@ -251,7 +261,7 @@ public class DBConnector {
 		String confirmation = "";
 		try {
 			Statement s = connection.createStatement();
-			String text = "INSERT INTO USERS(MAIL , CONFIRMATION, PW, NAME) values('" + mail + "', false, '" + password
+			String text = "INSERT INTO USERS(MAIL , CONFIRMATION, PW, NAME) values('" + mail + "', false, '" + PWHash.generateStorngPasswordHash(password)
 					+ "','" + username + "')";
 			System.out.println(text);
 			s.execute(text);
@@ -279,8 +289,15 @@ public class DBConnector {
 			}
 
 		} catch (SQLException e) {
+			e.printStackTrace();
 			System.out.println(e.getSQLState() + " " + e.getMessage() + " " + e.getLocalizedMessage());
 			throw e;
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvalidKeySpecException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 
 		try {

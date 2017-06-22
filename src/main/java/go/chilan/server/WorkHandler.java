@@ -3,6 +3,7 @@ package go.chilan.server;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.Connection;
@@ -20,51 +21,25 @@ class WorkHandler implements Runnable {
 	private final EasyCrypt cryption;
 	private ObjectOutputStream outputStream;
 	private ObjectInputStream inputStream;
-	private Connection connection;
 	private DBHelper helper;
-	/*
-	 * WorkHandler(Socket socket, EasyCrypt cryption) { this.socket = socket;
-	 * this.cryption = cryption;
-	 * 
-	 * connection = null; try { connection =
-	 * DBConnector.createDatabaseConnection();
-	 * System.out.println("Database Connection created"); } catch
-	 * (ClassNotFoundException e1) { // TODO Auto-generated catch block
-	 * e1.printStackTrace(); } catch (SQLException e) { // TODO Auto-generated
-	 * catch block e.printStackTrace(); } }
-	 */
+
 	private ServerSocket serverSocket;
 
 	WorkHandler(ServerSocket socket, EasyCrypt cryption) {
 		// this.socket = socket;
 		this.serverSocket = socket;
 		this.cryption = cryption;
-
-		connection = null;
-		try {
-			connection = DBConnector.createDatabaseConnection();
-			System.out.println("database connection: "+!connection.isClosed() + " (Server)");
-			System.out.println("Database Connection created");
-		} catch (ClassNotFoundException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		helper = new DBHelper();
 	}
 
 	public void run() {
 
 		System.out.println("new incoming connection");
 
-		try
-
-		{
+		try {
 			System.out.println("initialisation of connection");
 
-			inputStream = new ObjectInputStream(
-					/* cryption.decryptInputStream( */socket.getInputStream()/* ) */);
+			inputStream = new ObjectInputStream(socket.getInputStream());
 			System.out.println("inputStream created");
 
 			ServerMessageAuth auth = (ServerMessageAuth) FileHelper.readCryptedObject(inputStream, cryption);
@@ -72,14 +47,22 @@ class WorkHandler implements Runnable {
 			System.out.println("read object...decryption done");
 
 			outputStream = null;
-			outputStream = new ObjectOutputStream(
-					/* cryption.encryptOutputStream( */socket.getOutputStream()/* ) */);
+			outputStream = new ObjectOutputStream(socket.getOutputStream());
+
 			outputStream.flush();
-			helper = new DBHelper(connection);
+
 			boolean authCorrect = handleAuthRequest(auth);
 
-			if (authCorrect) {
-				int user = helper.getUserId(auth.getMail());
+			if (auth.getInformation() == ConnectionInformation.VERFIY_MAIL) {
+				if (authCorrect)
+					FileHelper.writeCryptedObject(outputStream, cryption,
+							new ConnectionMessage(ConnectionInformation.CORRECT_TOKEN));
+				else
+					FileHelper.writeCryptedObject(outputStream, cryption,
+							new ConnectionMessage(ConnectionInformation.WRONG_TOKEN));
+
+			} else if (authCorrect) {
+				String user = helper.getUserId(auth.getMail());
 				UserRequestHandler handler = new UserRequestHandler(helper, inputStream, outputStream, user, cryption);
 
 				System.out.println("user: " + user + " can do operation");
@@ -108,7 +91,6 @@ class WorkHandler implements Runnable {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
 	}
 
 	private boolean handleAuthRequest(ServerMessageAuth auth) throws Exception {
@@ -132,6 +114,11 @@ class WorkHandler implements Runnable {
 			else
 				return false;
 
+		case VERFIY_MAIL:
+			System.out.println("verify mail...");
+			Boolean validated = helper.validateMail(auth.getAuth());
+			return validated;
+
 		case CREATE_USER:
 			message = helper.createUser(auth);
 			FileHelper.writeCryptedObject(outputStream, cryption, message);
@@ -142,20 +129,30 @@ class WorkHandler implements Runnable {
 		}
 	}
 
-	public void runTask() throws IOException {
-		// TODO Auto-generated method stub
+	// seriel working
+	public void runTask() {
 
 		do {
-			socket = serverSocket.accept();
+			try {
+				socket = serverSocket.accept();
 
-			run();
+				run();
+			} catch (IOException e) {
+
+			} finally {
+				try {
+					if (socket != null) {
+						System.out.println("socket close");
+						socket.close();
+					}
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+			}
 
 		} while (true);
 
-		/*
-		if (connection != null)
-			if (!connection.isClosed())
-				connection.close();*/
 	}
 
 }
