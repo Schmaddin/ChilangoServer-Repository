@@ -1,6 +1,5 @@
 package go.chilan.server;
 
-import static com.mongodb.client.model.Filters.eq;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,25 +40,7 @@ public class App {
 
 	public static void main(String[] args) throws Exception {
 
-		// DBHelper helper = new DBHelper();
-		/*
-		 * ConnectionMessage message = helper.createUser(new
-		 * ServerMessageAuth("Schmaddin", "chilanGoes",
-		 * "martin.wuerflein@gmx.de", null, ConnectionInformation.CREATE_USER));
-		 * / System.out.println(message.getInfoConnection().name() + " " +
-		 * message.getAdditionalField());
-		 */
-		// System.out.println("validation:
-		// +"+helper.validateMail("82b54d87-4e0d-477a-bed9-b6681080c04f"));
 
-		/*
-		 * message=helper.logIn(new ServerMessageAuth("Schmaddin", "",
-		 * "martin.wuerflein@gmx.de",
-		 * "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vY2hpbGFuZ28ubWUiLCJzdWIiOiJ1c2Vycy9tYXJ0aW4ud3VlcmZsZWluQGdteC5kZSIsImV4cCI6MTQ5ODEzNjA2NH0.Tq22NOBkZUaoz6PUxQJtSQqC5kwWW8XZOrofVsdfXYv0",
-		 * ConnectionInformation.LOG_IN_TOKEN));
-		 * System.out.println(message.getInfoConnection().name() + " " +
-		 * message.getAdditionalField());
-		 */
 
 		NetworkService service = null;
 		try {
@@ -67,7 +48,7 @@ public class App {
 			getBaseFolderForTasks();
 			pool = Executors.newFixedThreadPool(8);
 
-			service = new NetworkService(Constants.SERVER_PORT_NUMBER, pool);
+			service = new NetworkService(Constants.SERVER_PORT_NUMBER_INTERN, pool);
 			// new Thread(service).start();
 			pool.execute(service);
 
@@ -87,7 +68,6 @@ public class App {
 		if (!taskPath.exists())
 			taskPath.mkdirs();
 
-		System.out.println(baseFolder + "  " + taskPath.getAbsolutePath());
 		return taskPath.getAbsolutePath();
 	}
 

@@ -41,11 +41,11 @@ public class ConfirmationListener implements Runnable {
 			ec = new EasyCrypt(null, EasyCrypt.aes);
 			ec.setKey(ec.readKey(new File("aes.key")));
 
-			server = new ServerSocket(Constants.PORT_MAIL_CHECK);
+			server = new ServerSocket(Constants.PORT_MAIL_CHECK_INTERN);
 
 			System.out.println("ConfirmationListener: ServerSocket created");
 
-			System.out.println("Listening for connection on port " + Constants.PORT_MAIL_CHECK + " ....");
+			System.out.println("Listening for connection on port " + Constants.PORT_MAIL_CHECK_INTERN + " ....");
 
 			do {
 				try (Socket socket = server.accept()) {
@@ -68,7 +68,7 @@ public class ConfirmationListener implements Runnable {
 						lastRequestTimeStamps.add(System.currentTimeMillis());
 						try {
 							ServerConnection connection = new ServerConnection(ec, new ServerMessageAuth("", "", "",
-									conf, ConnectionMessage.ConnectionInformation.VERFIY_MAIL));
+									conf, ConnectionMessage.ConnectionInformation.VERFIY_MAIL), "server");
 
 							ConnectionMessage validated = (ConnectionMessage) connection.getConnectionMessage();
 

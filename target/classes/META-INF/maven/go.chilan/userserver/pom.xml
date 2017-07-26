@@ -35,6 +35,12 @@
 			<version>1.4</version>
 		</dependency>
 
+    <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>mongodb-driver</artifactId>
+        <version>3.4.2</version>
+    </dependency>
+
 		<dependency>
 			<groupId>org.mongodb</groupId>
 			<artifactId>bson</artifactId>
@@ -47,10 +53,5 @@
 			<version>0.9-SNAPSHOT</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.derby</groupId>
-			<artifactId>derby</artifactId>
-			<version>10.8.3.0</version>
-		</dependency>
 	</dependencies>
 </project>

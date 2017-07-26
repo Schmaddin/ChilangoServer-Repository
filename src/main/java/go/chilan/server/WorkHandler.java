@@ -8,13 +8,17 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.github.filosganga.geogson.model.Point;
 import com.graphhopper.chilango.FileHelper;
 import com.graphhopper.chilango.network.ConnectionMessage;
 import com.graphhopper.chilango.network.ConnectionMessage.ConnectionInformation;
 import com.graphhopper.chilango.network.EasyCrypt;
 import com.graphhopper.chilango.network.RequestMessage;
 import com.graphhopper.chilango.network.ServerMessageAuth;
+import com.vividsolutions.jts.geom.Coordinate;
 
 class WorkHandler implements Runnable {
 	private Socket socket;
@@ -37,6 +41,8 @@ class WorkHandler implements Runnable {
 		System.out.println("new incoming connection");
 
 		try {
+			helper.resetUser();
+
 			System.out.println("initialisation of connection");
 
 			inputStream = new ObjectInputStream(socket.getInputStream());
@@ -67,12 +73,13 @@ class WorkHandler implements Runnable {
 
 				System.out.println("user: " + user + " can do operation");
 
-				boolean acceptIfnformation = true;
-				while (acceptIfnformation) {
+				boolean acceptInformation = true;
+				while (acceptInformation) {
 
 					RequestMessage request = (RequestMessage) FileHelper.readCryptedObject(inputStream, cryption);
+					System.out.println("request received: "+request.getType().name());
 					int response = handler.handleRequest(request);
-					acceptIfnformation = response == -1 ? false : true;
+					acceptInformation = response == -1 ? false : true;
 
 				}
 
@@ -123,7 +130,23 @@ class WorkHandler implements Runnable {
 			message = helper.createUser(auth);
 			FileHelper.writeCryptedObject(outputStream, cryption, message);
 
+			ArrayList<Coordinate> coordinates = (ArrayList<Coordinate>) FileHelper.readCryptedObject(inputStream, cryption);
+			System.out.println("read1");
+			
+			helper.changeUserPosition(Point.from(coordinates.get(0).y, coordinates.get(0).x),
+					helper.getUserId(auth.getMail()));
+			if (coordinates.size() > 1)
+				helper.changeUserWorkPosition(Point.from(coordinates.get(0).y, coordinates.get(0).x),
+						helper.getUserId(auth.getMail()));
+
+			Integer team = (Integer) FileHelper.readCryptedObject(inputStream, cryption);
+			helper.changeUserTeam(team,
+					helper.getUserId(auth.getMail()));
+			
+			System.out.println("read2: team: "+team);
+			
 			return false;
+			
 		default:
 			return false;
 		}
