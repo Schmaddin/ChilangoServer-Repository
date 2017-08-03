@@ -19,10 +19,14 @@ import com.github.filosganga.geogson.model.Point;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.graphhopper.chilango.FileHelper;
+import com.graphhopper.chilango.data.Feedback;
 import com.graphhopper.chilango.data.JsonHelper;
 import com.graphhopper.chilango.data.ModerationTask;
+import com.graphhopper.chilango.data.RouteQuestionary;
 import com.graphhopper.chilango.data.UserStatus;
+import com.graphhopper.chilango.data.database.FeedbackModel;
 import com.graphhopper.chilango.data.database.PointModel;
+import com.graphhopper.chilango.data.database.QuestionaryModel;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
 import com.graphhopper.chilango.data.database.SubmitType;
 import com.graphhopper.chilango.data.database.SubmitTypeInterface;
@@ -211,9 +215,9 @@ public class DBHelper {
 
 		Document doc = MongoDB.documentOfValueInDataBase(db, "transactions", "transactionId", id);
 		System.out.println("document found");
-		String entry=MongoDB.convertToJson(doc);
-		
-		TransactionModel transaction = (TransactionModel)JsonHelper.parseJson(entry, TransactionModel.class);
+		String entry = MongoDB.convertToJson(doc);
+
+		TransactionModel transaction = (TransactionModel) JsonHelper.parseJson(entry, TransactionModel.class);
 		System.out.println("transaction");
 		if (transaction.getPath() != null) {
 			SubmitTypeInterface type = (SubmitTypeInterface) FileHelper.readObject(new File(transaction.getPath()));
@@ -231,14 +235,14 @@ public class DBHelper {
 	public void changeTransaction(String json) {
 		if (!checkAdmin())
 			return;
-		TransactionModel model=(TransactionModel) JsonHelper.parseJson(json,TransactionModel.class);
-		MongoDB.replaceEntry(db,"transactions","transactionId",model.getTransactionId(),model);
+		TransactionModel model = (TransactionModel) JsonHelper.parseJson(json, TransactionModel.class);
+		MongoDB.replaceEntry(db, "transactions", "transactionId", model.getTransactionId(), model);
 	}
-	
-	public String requestUserById(String id){
-		if(!checkAdmin())
+
+	public String requestUserById(String id) {
+		if (!checkAdmin())
 			return null;
-		
+
 		return MongoDB.convertToJson(MongoDB.documentOfValueInDataBase(db, "users", "_id", new ObjectId(id)));
 	}
 
@@ -246,31 +250,77 @@ public class DBHelper {
 		if (!checkAdmin())
 			return;
 
-		UserModel model=(UserModel) JsonHelper.parseJson(json,UserModel.class);
-		MongoDB.replaceEntry(db,"users","mail",model.getMail(),model);
+		UserModel model = (UserModel) JsonHelper.parseJson(json, UserModel.class);
+		MongoDB.replaceEntry(db, "users", "mail", model.getMail(), model);
 	}
 
 	public void addRoute(RouteVersionModel route) {
-		MongoDB.changeRoute(db,route);
-		
+		MongoDB.changeRoute(db, route);
+
 	}
 
 	public List<RouteVersionModel> getRoutes(ArrayList<Integer> information) {
-		if(information==null){
+		if (information == null) {
 			// still ignored (filter routes by number)
 		}
 		return MongoDB.getRoutesLastVersion(db);
-		
+
 	}
-	
+
 	public List<RouteVersionModel> getRoute(ArrayList<Integer> information) {
-		if(information==null){
+		if (information == null) {
 			return null;
 		}
-		int versions=10;
-		if(information.size()>1)
-			versions=information.get(1);
-		return MongoDB.getRouteWithVersions(db,information.get(0),versions);
-		
+		int versions = 10;
+		if (information.size() > 1)
+			versions = information.get(1);
+		return MongoDB.getRouteWithVersions(db, information.get(0), versions);
+
+	}
+
+	public boolean addQuestionary(Feedback feedback) {
+		if (!checkAdmin())
+			return false;
+		QuestionaryModel model = new QuestionaryModel(feedback.getQuestionary(), feedback.getRouteId(),
+				feedback.getTransactionId());
+		return MongoDB.addDocumentByObject(db, "questionary", model, "transactionId", feedback.getTransactionId());
+
+	}
+
+	public boolean addFeedback(Feedback feedback) {
+		if (!checkAdmin())
+			return false;
+		return MongoDB.addDocumentByObject(db, "feedbacks", feedback, "transactionId", feedback.getTransactionId());
+
+	}
+
+	public void changeFeedback(FeedbackModel feedbackModel) {
+		if (!checkAdmin())
+			return;
+		MongoDB.replaceEntry(db, "feedbacks", "transactionId", feedbackModel.getTransactionId(), feedbackModel);
+	}
+
+	public String getFeedback(int transactionId) {
+
+		return MongoDB
+				.convertToJson(MongoDB.documentOfValueInDataBase(db, "feedbacks", "transactionId", transactionId));
+
+	}
+
+	public List<FeedbackModel> getFeedbacks(ArrayList<Long> arrayList) {
+		if (!checkAdmin())
+			return null;
+
+		long since = 0;
+		long routeId = 0;
+		if (arrayList != null)
+			if (arrayList.size() > 0) {
+				since = arrayList.size() > 1 ? arrayList.get(1) : 0;
+
+				routeId = arrayList.get(0);
+			}
+
+		return MongoDB.getFeedbacks(db, since, (int) routeId);
+
 	}
 }

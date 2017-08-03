@@ -50,7 +50,7 @@ public class MailUser {
 public static void createConfirmationMail(String mail, String confirmation) throws MessagingException {
 	if(mail!=null && !mail.trim().equals(""))
 	{
-		String content="<html>Welcome by ChilanGo! </br> Confirm your mail here: <a href=\"http://"+Constants.SERVER_IP+":"+Constants.PORT_MAIL_CHECK_INTERN+"/"+confirmation+"\">click me</a> </br> if the link does not work copy following into your brwoser: http://"+Constants.SERVER_IP+":8090/"+confirmation+"</html>";
+		String content="<html>Welcome by ChilanGo! </br> Confirm your mail here: <a href=\"https://srv.chilango.me/WebService/api/mail?verification="+confirmation+"\">click me</a> </br> if the link does not work copy following into your brwoser: https://srv.chilango.me/WebService/api/mail?verification="+confirmation+" </html>";
 		writeMail(mail,content,"Confirm ChilanGo Account");
 	}
 	

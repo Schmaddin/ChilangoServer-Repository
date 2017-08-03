@@ -15,10 +15,11 @@ import java.util.List;
 import com.github.filosganga.geogson.model.Geometry;
 import com.github.filosganga.geogson.model.Point;
 import com.graphhopper.chilango.FileHelper;
-import com.graphhopper.chilango.data.ExplicitRouteMessage;
+import com.graphhopper.chilango.data.Feedback;
 import com.graphhopper.chilango.data.ModerationTask;
 import com.graphhopper.chilango.data.UserStatus;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
+import com.graphhopper.chilango.data.database.FeedbackModel;
 import com.graphhopper.chilango.network.Constants;
 import com.graphhopper.chilango.network.EasyCrypt;
 import com.graphhopper.chilango.network.RequestMessage;
@@ -84,7 +85,7 @@ public class UserRequestHandler {
 			int routeId = 0;
 			byte trust = ServerLogic.calculateTrust(helper, user, TaskHelper.getGeometry(task));
 
-			long transactionId = (int) helper.createTransactionId();
+			int transactionId = (int) helper.createTransactionId();
 			int status = inputProcessor.handleTask(task, (int) transactionId);
 			boolean done = helper.addTransaction(path, task.getType(), user, status, routeId,
 					new Date(task.getLastEdit()), trust, TaskHelper.getGeneralizedGeometry(task, 0.25f),
@@ -108,28 +109,29 @@ public class UserRequestHandler {
 			return 0;
 
 		case SubmitFeedback:
-			HashMap<String, ExplicitRouteMessage> taskMap = (HashMap<String, ExplicitRouteMessage>) request
+			HashMap<String, Feedback> feedbackMap = (HashMap<String, Feedback>) request
 					.getInformation();
-			HashMap<String, Long> transactionResultList = new HashMap<>();
-			for (String currentPath : taskMap.keySet()) {
-				ExplicitRouteMessage currentTask = taskMap.get(currentPath);
+			HashMap<String, Integer> transactionResultList = new HashMap<>();
+			for (String currentPath : feedbackMap.keySet()) {
+				Feedback currentFeedback = feedbackMap.get(currentPath);
+				
 
 				// process
 				path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
-						+ currentTask.getType() + "-" + user) + ".explicit";
+						+ currentFeedback.getType() + "-" + user) + ".explicit";
 
 				// calculates trust depending on submitting position
-				Point point = Point.from(taskMap.get(currentPath).getLon(), taskMap.get(currentPath).getLat());
+				Point point = Point.from(feedbackMap.get(currentPath).getLon(), feedbackMap.get(currentPath).getLat());
 				trust = ServerLogic.calculateTrust(helper, user, point);
 
 				transactionId = (int) helper.createTransactionId();
-				status = inputProcessor.handleFeedback(currentTask, (int) transactionId);
-				done = helper.addTransaction(path, currentTask.getType(), user, status, currentTask.getRouteId(),
-						new Date(currentTask.getTimestamp()), trust, null, (int) transactionId, -1);
+				status = inputProcessor.handleFeedback(currentFeedback, (int) transactionId);
+				done = helper.addTransaction(path, currentFeedback.getType(), user, status, currentFeedback.getRouteId(),
+						new Date(currentFeedback.getTimestamp()), trust, null, (int) transactionId, -1);
 				System.out.println("new task saved to: " + transactionId);
 
 				// write object to folder
-				FileHelper.writeObject(new File(path), new ExplicitRouteMessage(currentTask, transactionId));
+				FileHelper.writeObject(new File(path), new Feedback(currentFeedback, transactionId));
 
 				if (!done) {
 					transactionId = 0;
@@ -231,6 +233,18 @@ public class UserRequestHandler {
 			// TODO
 			return -1;
 
+		case RequestFeedbacks:
+			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestFeedbacks,new ArrayList<>(helper.getFeedbacks((ArrayList<Long>)request.getInformation()))));
+			return 0;
+
+		case RequestFeedback:
+			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestFeedback,(helper.getFeedback((Integer)request.getInformation()))));
+			return 0;
+			
+		case ChangeFeedback:
+			helper.changeFeedback((FeedbackModel)request.getInformation());
+			return -1;
+			
 		case RequestRoutes:
 			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestRoutes,new LinkedList<>(helper.getRoutes((ArrayList<Integer>)request.getInformation()))));
 			return 0;

@@ -1,10 +1,11 @@
 package go.chilan.server;
 
 import com.graphhopper.chilango.GeoHelper;
-import com.graphhopper.chilango.data.ExplicitRouteMessage;
+import com.graphhopper.chilango.data.Feedback;
 import com.graphhopper.chilango.data.ModerationTask;
 import com.graphhopper.chilango.data.PointSystem;
 import com.graphhopper.chilango.data.Route;
+import com.graphhopper.chilango.data.database.FeedbackModel;
 import com.graphhopper.chilango.tasks.ChilangoTask;
 
 public class InputProcesser {
@@ -17,13 +18,23 @@ public class InputProcesser {
 	DBHelper client;
 	String currentUser;
 
-	public int handleFeedback(ExplicitRouteMessage message, int transactionId){
+	public int handleFeedback(Feedback feedback, int transactionId){
 		
 		int revisorPoints = 0;
 		int creationPoints = 0;
 		int status=0;
 		
-		switch(message.getType()){
+		if(feedback.isSuggestion())
+		{
+			client.addFeedback(feedback);
+		}
+		
+		if(feedback.getQuestionary()!=null)
+			client.addQuestionary(new Feedback(feedback,transactionId));
+		
+
+		
+		switch(feedback.getType()){
 		case route_not_found:
 			//TODO
 			//remove trust
@@ -43,7 +54,7 @@ public class InputProcesser {
 			revisorPoints=PointSystem.FEEDBACK_NORMAL;
 			break;
 		case route_gps_Validation:
-			Route route=message.getRoute();
+			Route route=feedback.getRoute();
 			double distance=0;
 			
 			int j=0;
@@ -65,21 +76,21 @@ public class InputProcesser {
 			revisorPoints=PointSystem.FEEDBACK_NORMAL;
 			
 			break;
-		case is_route_alright:
+		case route_alright:
 			//TODO
 			status=1;
 			
 			//add trust to route
 			revisorPoints=PointSystem.FEEDBACK_NORMAL;
 			break;
-		case is_frequency_alright:
+		case frequency_alright:
 			//TODO
 			status=1;
 			
 			//add trust to route
 			revisorPoints=PointSystem.FEEDBACK_NORMAL;
 			break;
-		case is_timeTable_alright:
+		case timeTable_alright:
 			//TODO
 			status=1;
 			
@@ -109,7 +120,9 @@ public class InputProcesser {
 		
 		}
 		
-		client.addPointsToUser(transactionId,currentUser,revisorPoints,creationPoints,message.getType().getValue());
+		client.addPointsToUser(transactionId,currentUser,revisorPoints,creationPoints,feedback.getType().getValue());
+		client.addFeedback(new FeedbackModel(feedback,transactionId,(status==0 ? false : true)));
+		
 		return status;
 	}
 

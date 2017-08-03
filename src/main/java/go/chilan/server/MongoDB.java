@@ -2,6 +2,7 @@ package go.chilan.server;
 
 import static com.mongodb.client.model.Filters.eq;
 
+
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.text.DateFormat;
@@ -43,6 +44,8 @@ import com.graphhopper.chilango.data.database.RouteVersionModel;
 import com.graphhopper.chilango.data.database.SubmitType;
 import com.graphhopper.chilango.data.database.TransactionModel;
 import com.graphhopper.chilango.data.database.UserModel;
+
+import com.graphhopper.chilango.data.database.FeedbackModel;
 import com.graphhopper.chilango.network.ConnectionMessage;
 import com.graphhopper.chilango.network.ConnectionMessage.ConnectionInformation;
 import com.mongodb.BasicDBList;
@@ -78,6 +81,27 @@ public class MongoDB {
 				.setExpiration(expirationDate).signWith(SignatureAlgorithm.HS256, key).compact();
 
 		return jwt;
+	}
+
+	public static boolean addDocumentByObject(MongoDatabase db, String collectionName, Object object,
+			String doubleEnryRow, Object doubleEntryValue) {
+		MongoCollection<Document> collection = db.getCollection(collectionName);
+
+		Document myDoc = null;
+
+		if (doubleEnryRow != null && doubleEntryValue!=null)
+			myDoc=collection.find(eq(doubleEnryRow, doubleEntryValue)).first();
+
+		if (myDoc == null) {
+			String json = gson.toJson(object);// data is User DTO, just pojo!
+			System.out.println(json);
+
+			BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
+			collection.insertOne(new Document(document1));
+			return true;
+		} else
+			return false;
+
 	}
 
 	public static ConnectionMessage prooveToken(String plainjwt, String user) {
@@ -654,7 +678,6 @@ public class MongoDB {
 		MongoCollection<Document> routeCollection = db.getCollection("routes");
 		Document myDoc = routeCollection.find(eq("routeId", route.getRouteId())).first();
 		if (myDoc != null) {
-			
 
 			BasicDBObject push = (BasicDBObject) JSON.parse(gson.toJson(route));
 
@@ -725,6 +748,30 @@ public class MongoDB {
 
 				RouteModel model = (RouteModel) JsonHelper.parseJson(convertToJson(doc), RouteModel.class);
 				routes.add(model.getRoutes().get(model.getRoutes().size() - 1));
+			}
+			return routes;
+		} finally {
+			curs.close();
+		}
+	}
+	
+	
+	public static List<FeedbackModel> getFeedbacks(MongoDatabase db,long since,int routeId) {
+		MongoCollection<Document> routeCollection = db.getCollection("feedbacks");
+
+		MongoCursor<Document> curs = routeCollection.find().iterator();
+		List<FeedbackModel> routes = new LinkedList<>();
+		try {
+			while (curs.hasNext()) {
+				Document doc = curs.next();
+
+				
+				FeedbackModel model = (FeedbackModel) JsonHelper.parseJson(convertToJson(doc), FeedbackModel.class);
+				if(model.getTimestamp()>since)
+				if(routeId >0 && model.getRouteId()==routeId || routeId <= 0)
+				{
+					routes.add(model);
+				}
 			}
 			return routes;
 		} finally {
