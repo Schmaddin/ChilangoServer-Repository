@@ -133,9 +133,11 @@ public class DBHelper {
 			if (time - points.getTime() > 0)
 				filtered.add(points);
 		}
-		return new UserStatus(status.getPoints(), status.getPlaceExplore(), status.getPlaceRevise(), status.getName(),
-				status.getStatus().getStatusValue(), status.getPointsUpdate(), filtered, status.getLat(),
-				status.getLon(), status.getWorkLat(), status.getWorkLon(), status.getTeam(), status.getTrust());
+
+		return new UserStatus(status.getPoints(), status.getPlaceExplore(), status.getPlaceRevise(),
+				status.getPlaceHighscore(), status.getName(), status.getStatus().getStatusValue(),
+				status.getPointsUpdate(), filtered, status.getLat(), status.getLon(), status.getWorkLat(),
+				status.getWorkLon(), status.getTeam(), status.getTrust());
 	}
 
 	public void resetUser() {
@@ -322,5 +324,17 @@ public class DBHelper {
 
 		return MongoDB.getFeedbacks(db, since, (int) routeId);
 
+	}
+
+	public void createHighscore() {
+		if (!checkAdmin())
+			return;
+		MongoDB.createRankings(db);
+	}
+
+	public void deployRoutes() {
+		if (!checkAdmin())
+			return;
+		MongoDB.deployRoutes(db);
 	}
 }

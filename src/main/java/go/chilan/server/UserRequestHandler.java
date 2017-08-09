@@ -313,6 +313,14 @@ public class UserRequestHandler {
 			helper.changeUser(info);
 			return -1;
 
+		case CreateHighscore:
+			helper.createHighscore();
+			return -1;
+			
+		case DeployRoutes:
+			helper.deployRoutes();
+			return -1;
+			
 		case close:
 			System.out.println("close conncection to user: " + user);
 			return -1;

@@ -1,8 +1,5 @@
 package go.chilan.server;
 
-import static com.mongodb.client.model.Filters.eq;
-
-
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.text.DateFormat;
@@ -12,9 +9,12 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.TreeMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.Collections;
 
 import javax.mail.MessagingException;
 
@@ -33,6 +33,7 @@ import com.github.filosganga.geogson.model.positions.SinglePosition;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.graphhopper.chilango.FileHelper;
+import com.graphhopper.chilango.data.InterfaceAdapter;
 import com.graphhopper.chilango.data.JsonHelper;
 import com.graphhopper.chilango.data.Route;
 import com.graphhopper.chilango.data.RouteHelper;
@@ -42,7 +43,9 @@ import com.graphhopper.chilango.data.database.PointModel;
 import com.graphhopper.chilango.data.database.RouteModel;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
 import com.graphhopper.chilango.data.database.SubmitType;
+import com.graphhopper.chilango.data.database.SubmitTypeInterface;
 import com.graphhopper.chilango.data.database.TransactionModel;
+import com.graphhopper.chilango.data.database.RankingModel;
 import com.graphhopper.chilango.data.database.UserModel;
 
 import com.graphhopper.chilango.data.database.FeedbackModel;
@@ -60,6 +63,7 @@ import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Updates;
 import com.mongodb.util.JSON;
+import static com.mongodb.client.model.Filters.eq;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.graphhopper.chilango.network.Constants;
 
@@ -71,7 +75,7 @@ import io.jsonwebtoken.SignatureException;
 
 public class MongoDB {
 	static private Gson gson = new GsonBuilder().registerTypeAdapterFactory(new GeometryAdapterFactory())
-			.registerTypeAdapterFactory(new JtsAdapterFactory()).create();
+			.registerTypeAdapterFactory(new JtsAdapterFactory()).registerTypeAdapter(SubmitTypeInterface.class, new InterfaceAdapter<SubmitTypeInterface>()).create();
 
 	public static String createToken(String user) {
 		byte[] key = getSignatureKey();
@@ -89,8 +93,8 @@ public class MongoDB {
 
 		Document myDoc = null;
 
-		if (doubleEnryRow != null && doubleEntryValue!=null)
-			myDoc=collection.find(eq(doubleEnryRow, doubleEntryValue)).first();
+		if (doubleEnryRow != null && doubleEntryValue != null)
+			myDoc = collection.find(eq(doubleEnryRow, doubleEntryValue)).first();
 
 		if (myDoc == null) {
 			String json = gson.toJson(object);// data is User DTO, just pojo!
@@ -453,9 +457,168 @@ public class MongoDB {
 		if (user.getWorkPoint() == null)
 			user.setWorkPoint(Point.from(0.0, 0.0));
 
-		return new UserStatus(user.getPoints(), 120, 130, user.getName(), user.getStatus(), user.getPointsUpdateTime(),
-				user.getPointModel(), user.getHomePoint().lat(), user.getHomePoint().lon(), user.getWorkPoint().lat(),
-				user.getWorkPoint().lon(), user.getTeam(), user.getTrust());
+		return new UserStatus(user.getPoints(), findPlaceInRanking(db, "creator_highscore", identifier),
+				findPlaceInRanking(db, "reviser_highscore", identifier),
+				findPlaceInRanking(db, "highscore", identifier), user.getName(), user.getStatus(),
+				user.getPointsUpdateTime(), user.getPointModel(), user.getHomePoint().lat(), user.getHomePoint().lon(),
+				user.getWorkPoint().lat(), user.getWorkPoint().lon(), user.getTeam(), user.getTrust());
+
+	}
+
+	private static int findPlaceInRanking(MongoDatabase db, String highscoreCollection, String identifier) {
+
+		MongoCollection<Document> currentCollection = db.getCollection(highscoreCollection);
+		FindIterable<Document> docs = currentCollection.find(eq("id", identifier));
+		try {
+			return docs.first().getInteger("place");
+		} catch (NullPointerException e) {
+
+		}
+		return -1;
+	}
+
+	public static void createRankings(MongoDatabase db) {
+		TreeMap<Integer, List<String>> reviserRanking = new TreeMap<>(Collections.reverseOrder());
+		TreeMap<Integer, List<String>> createrRanking = new TreeMap<>(Collections.reverseOrder());
+		TreeMap<Integer, List<String>> highscore = new TreeMap<>(Collections.reverseOrder());
+
+		MongoCollection<Document> collection = db.getCollection("users");
+		FindIterable<Document> results = collection.find();
+		MongoCursor<Document> cursor = results.iterator();
+
+		while (cursor.hasNext()) {
+			Document doc = cursor.next();
+
+			String json = com.mongodb.util.JSON.serialize(doc);
+			System.out.println("retrieved: "+json);
+			UserModel current = (UserModel) gson.fromJson(json, UserModel.class);
+
+			Integer points = 0;
+			Integer revisePoints = 0;
+			Integer creationPoints = 0;
+			if (current.getPointModel()!=null) {
+				for (PointModel point : current.getPointModel()) {
+					points += point.getCreatorPoints() + point.getRevisorPoints();
+			//		if ((new Date(point.getTime()))
+			//				.after(new Date(System.currentTimeMillis() - 31 * 24 * 60 * 60 * 1000))) {
+						revisePoints += point.getRevisorPoints();
+						creationPoints += point.getCreatorPoints();
+			//		}
+				}
+			}
+			
+			String id = ((ObjectId) doc.get("_id")).toString();
+
+			List<String> ids = null;
+			if (highscore.containsKey(points)) {
+				ids = highscore.get(points);
+			} else {
+				ids = new LinkedList<>();
+				highscore.put(points, ids);
+			}
+			ids.add(id);
+
+			if (reviserRanking.containsKey(revisePoints)) {
+				ids = reviserRanking.get(revisePoints);
+			} else {
+				ids = new LinkedList<>();
+				reviserRanking.put(revisePoints, ids);
+			}
+			ids.add(id);
+
+			if (createrRanking.containsKey(creationPoints)) {
+				ids = createrRanking.get(creationPoints);
+			} else {
+				ids = new LinkedList<>();
+				createrRanking.put(creationPoints, ids);
+			}
+			ids.add(id);
+
+		}
+
+		List<RankingModel> highscoreBest=new LinkedList<>();
+		
+		collection = db.getCollection("highscore");
+		collection.deleteMany(new Document()); // resets collection
+
+		int place = 1;
+		for (Map.Entry<Integer, List<String>> entry : highscore.entrySet()) {
+			Integer points = entry.getKey();
+			List<String> users = entry.getValue();
+
+			for (String user : users) {
+
+				RankingModel model = new RankingModel(user, points, place);
+
+				if(place<=10)
+					highscoreBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
+				
+				String json = gson.toJson(model);// data is User DTO, just
+				System.out.println("try to input: "+json+ " "+model.getId()+" "+model.getPoints());
+				
+				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
+				collection.insertOne(new Document(document1));
+				place++;
+			}
+
+		}
+		
+		List<RankingModel> reviserBest=new LinkedList<>();
+
+		collection = db.getCollection("reviser_highscore");
+		collection.deleteMany(new Document()); // resets collection
+
+		place = 1;
+		for (Map.Entry<Integer, List<String>> entry : reviserRanking.entrySet()) {
+			Integer points = entry.getKey();
+			List<String> users = entry.getValue();
+
+			for (String user : users) {
+
+				RankingModel model = new RankingModel(user, points, place);
+
+
+				if(place<=10)
+					reviserBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
+				
+				String json = gson.toJson(model);// data is User DTO, just
+
+				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
+				collection.insertOne(new Document(document1));
+				place++;
+			}
+
+		}
+
+
+		List<RankingModel> creatorBest=new LinkedList<>();
+		
+		collection = db.getCollection("creator_highscore");
+		collection.deleteMany(new Document()); // resets collection
+
+		place = 1;
+		for (Map.Entry<Integer, List<String>> entry : createrRanking.entrySet()) {
+			Integer points = entry.getKey();
+			List<String> users = entry.getValue();
+
+			for (String user : users) {
+
+				RankingModel model = new RankingModel(user, points, place);
+
+				if(place<=10)
+					creatorBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
+				
+				String json = gson.toJson(model);// data is User DTO, just
+
+				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
+				collection.insertOne(new Document(document1));
+				place++;
+			}
+
+		}
+		
+		DataCreater.writeHighscores(highscoreBest,reviserBest,creatorBest);
+
 
 	}
 
@@ -754,9 +917,8 @@ public class MongoDB {
 			curs.close();
 		}
 	}
-	
-	
-	public static List<FeedbackModel> getFeedbacks(MongoDatabase db,long since,int routeId) {
+
+	public static List<FeedbackModel> getFeedbacks(MongoDatabase db, long since, int routeId) {
 		MongoCollection<Document> routeCollection = db.getCollection("feedbacks");
 
 		MongoCursor<Document> curs = routeCollection.find().iterator();
@@ -765,18 +927,39 @@ public class MongoDB {
 			while (curs.hasNext()) {
 				Document doc = curs.next();
 
-				
 				FeedbackModel model = (FeedbackModel) JsonHelper.parseJson(convertToJson(doc), FeedbackModel.class);
-				if(model.getTimestamp()>since)
-				if(routeId >0 && model.getRouteId()==routeId || routeId <= 0)
-				{
-					routes.add(model);
-				}
+				if (model.getTimestamp() > since)
+					if (routeId > 0 && model.getRouteId() == routeId || routeId <= 0) {
+						routes.add(model);
+					}
 			}
 			return routes;
 		} finally {
 			curs.close();
 		}
+	}
+	
+	public static void deployRoutes(MongoDatabase db){
+		TreeMap<Integer,Route> routes=new TreeMap<>();
+		
+		MongoCollection<Document> routeCollection = db.getCollection("routes");
+
+		MongoCursor<Document> curs = routeCollection.find().iterator();
+		
+		try {
+			while (curs.hasNext()) {
+				Document doc = curs.next();
+				RouteModel model = (RouteModel) JsonHelper.parseJson(convertToJson(doc), RouteModel.class);
+				
+				if(model!=null && model.getRoutes()!=null)
+				routes.put(model.getRouteId(), model.getRoutes().get(model.getRoutes().size()-1).getRoute());
+			}
+		} finally {
+			curs.close();
+		}
+		
+		DataCreater.writeRoutes(routes);
+		
 	}
 
 }

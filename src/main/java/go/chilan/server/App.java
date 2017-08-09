@@ -71,4 +71,13 @@ public class App {
 		return taskPath.getAbsolutePath();
 	}
 
+	public static String getBaseFolderForCreation() {
+		
+		File taskPath = new File(baseFolder, "creation");
+		if (!taskPath.exists())
+			taskPath.mkdirs();
+
+		return taskPath.getAbsolutePath();
+	}
+	
 }
