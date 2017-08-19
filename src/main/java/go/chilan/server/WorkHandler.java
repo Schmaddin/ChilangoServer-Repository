@@ -144,10 +144,7 @@ class WorkHandler implements Runnable {
 					helper.changeUserWorkPosition(Point.from(coordinates.get(2).y, coordinates.get(2).x),
 							helper.getUserId(auth.getMail()));
 
-				Integer team = (Integer) FileHelper.readCryptedObject(inputStream, cryption);
-
-
-				System.out.println("read2: team: " + team);
+				MailUser.createContentMail("new user: "+auth.getMail(), auth.getMail()+" "+helper.getUserId(auth.getMail()));
 			}
 
 			return false;

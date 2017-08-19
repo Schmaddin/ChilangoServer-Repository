@@ -10,6 +10,8 @@ import com.github.filosganga.geogson.model.Point;
 import com.github.filosganga.geogson.model.positions.LinearPositions;
 import com.github.filosganga.geogson.model.positions.SinglePosition;
 import com.graphhopper.chilango.GeoHelper;
+import com.graphhopper.chilango.data.Status;
+import com.graphhopper.chilango.data.TrustLevel;
 import com.graphhopper.chilango.data.UserStatus;
 import com.vividsolutions.jts.geom.Coordinate;
 
@@ -41,24 +43,27 @@ public class ServerLogic {
 	private static byte calculateTrust(DBHelper helper, String user, List<Coordinate> coordinates) {
 		
 		UserStatus userStatus = helper.getUserStatus(user, System.currentTimeMillis());
+		byte trust=(byte)Status.calculateStatusValue(userStatus.getPoints(), userStatus.getStatus().getStatusValue());
 		if(userStatus==null)
 			return -1;
 		System.out.println("we got the userStatus");
 		
-		byte trust=(byte)(userStatus.getStatus().getStatusValue()+(userStatus.getPoints()/1000));
 		
 		float distance=GeoHelper.distanceToMultiLine(new Coordinate(userStatus.getLat(),userStatus.getLon()), coordinates);
 		
-		if(distance<1500)
-			trust+=10;
-		else if(distance <3000)
-		{
-			trust+=(byte)(10.0f-((distance-1500.0f)/1500.0f*10.0f));
-		}
+		byte temp = TrustLevel.trustByDistance(distance);
 		System.out.println("trust: "+trust);
 		
+		distance=GeoHelper.distanceToMultiLine(new Coordinate(userStatus.getWorkLat(),userStatus.getWorkLon()), coordinates);
+		
+		byte temp2=TrustLevel.trustByDistance(distance);
+		
+		trust+=temp>=trust?temp:temp2;
+				
 		return trust;
 	}
+
+
 	
 	private static byte calculateTrust(DBHelper helper, String user, double[] lat, double[] lon){
 

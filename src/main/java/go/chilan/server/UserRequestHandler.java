@@ -24,6 +24,7 @@ import com.graphhopper.chilango.data.UserStatus;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
 import com.graphhopper.chilango.data.database.SubmitTypeInterface;
 import com.graphhopper.chilango.data.database.FeedbackModel;
+import com.graphhopper.chilango.data.database.MapBoardModelField;
 import com.graphhopper.chilango.network.Constants;
 import com.graphhopper.chilango.network.EasyCrypt;
 import com.graphhopper.chilango.network.RequestMessage;
@@ -58,7 +59,7 @@ public class UserRequestHandler {
 
 	public int handleRequest(RequestMessage request) throws Exception {
 		String info = request.getInformation();
-		taskPath = App.getBaseFolderForTasks();	
+		taskPath = App.getBaseFolderForTasks();
 		InputProcesser inputProcessor = new InputProcesser(helper, user);
 
 		Type type;
@@ -67,21 +68,24 @@ public class UserRequestHandler {
 			String path = (taskPath + "/" + FileHelper.df.format(new Date(System.currentTimeMillis())) + "-" + user)
 					+ ".html";
 
-			type = new TypeToken<List<String>>(){}.getType();
-			//List<String> errorLines = (List<String>) request.getInformation();
+			MailUser.createContentMail("Error-Upload", "saved in: " + path);
+
+			type = new TypeToken<List<String>>() {
+			}.getType();
+			// List<String> errorLines = (List<String>)
+			// request.getInformation();
 			List<String> errorLines = (List<String>) JsonHelper.parseJsonAndroid(info, type);
-			
+
 			Files.write(Paths.get(path), errorLines);
 			return -1;
 
 		case PutLiveGPS:
-			//LiveRideUser ride = (LiveRideUser) request.getInformation();
+			// LiveRideUser ride = (LiveRideUser) request.getInformation();
 			LiveRideUser ride = (LiveRideUser) JsonHelper.parseJsonAndroid(info, LiveRideUser.class);
-			
-			
+
 			LiveDataHandler.addValue(new LiveRideUser(ride.getLat(), ride.getLon(), ride.getTimeStamp(),
-					ride.getTransportId(), ride.getHeading(), user, ride.isGame()));
-			
+					ride.getTransportId(), ride.getHeading(), ride.getFull(), user, ride.isGame()));
+
 			return -1;
 
 		case GetLiveGPS:
@@ -90,10 +94,11 @@ public class UserRequestHandler {
 			return 0;
 
 		case SubmitTask:
-//			ChilangoTask task = (ChilangoTask) request.getInformation();
+			// ChilangoTask task = (ChilangoTask) request.getInformation();
 			System.out.println(info);
-			SubmitTypeInterface get = (SubmitTypeInterface) JsonHelper.parseJsonAndroid(info, SubmitTypeInterface.class);
-			ChilangoTask task=(ChilangoTask)get;
+			SubmitTypeInterface get = (SubmitTypeInterface) JsonHelper.parseJsonAndroid(info,
+					SubmitTypeInterface.class);
+			ChilangoTask task = (ChilangoTask) get;
 			// process
 			path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
 					+ task.getType() + "-" + user) + ".task";
@@ -102,7 +107,7 @@ public class UserRequestHandler {
 			byte trust = ServerLogic.calculateTrust(helper, user, TaskHelper.getGeometry(task));
 
 			int transactionId = (int) helper.createTransactionId();
-			int status = inputProcessor.handleTask(task, (int) transactionId);
+			int status = inputProcessor.handleTask(task, (int) transactionId, false);
 			boolean done = helper.addTransaction(path, task.getType(), user, status, routeId,
 					new Date(task.getLastEdit()), trust, TaskHelper.getGeneralizedGeometry(task, 0.25f),
 					(int) transactionId, -1);
@@ -122,18 +127,19 @@ public class UserRequestHandler {
 				transactionId = 0;
 			FileHelper.writeCryptedObject(outputStream, cryption,
 					new RequestMessage(RequestType.TransactionConfirmation, transactionId));
+
+			MailUser.createContentMail("Task-Upload: " + task.getType().name(),
+					" transactionId: " + transactionId + " saved: " + path);
 			return 0;
 
 		case SubmitFeedback:
-//			HashMap<String, Feedback> feedbackMap = (HashMap<String, Feedback>) request
-//					.getInformation();
-			type = new TypeToken<HashMap<String,Feedback>>(){}.getType();
-			HashMap<String, Feedback> feedbackMap = (HashMap<String, Feedback>)JsonHelper.parseJsonAndroid(info, type);
-			
+			type = new TypeToken<HashMap<String, Feedback>>() {
+			}.getType();
+			HashMap<String, Feedback> feedbackMap = (HashMap<String, Feedback>) JsonHelper.parseJsonAndroid(info, type);
+
 			HashMap<String, Integer> transactionResultList = new HashMap<>();
 			for (String currentPath : feedbackMap.keySet()) {
 				Feedback currentFeedback = feedbackMap.get(currentPath);
-				
 
 				// process
 				path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
@@ -145,8 +151,9 @@ public class UserRequestHandler {
 
 				transactionId = (int) helper.createTransactionId();
 				status = inputProcessor.handleFeedback(currentFeedback, (int) transactionId);
-				done = helper.addTransaction(path, currentFeedback.getType(), user, status, currentFeedback.getRouteId(),
-						new Date(currentFeedback.getTimestamp()), trust, null, (int) transactionId, -1);
+				done = helper.addTransaction(path, currentFeedback.getType(), user, status,
+						currentFeedback.getRouteId(), new Date(currentFeedback.getTimestamp()), trust, null,
+						(int) transactionId, -1);
 				System.out.println("new task saved to: " + transactionId);
 
 				// write object to folder
@@ -156,6 +163,10 @@ public class UserRequestHandler {
 					transactionId = 0;
 				}
 				transactionResultList.put(currentPath, transactionId);
+
+				if (currentFeedback.isSuggestion())
+					MailUser.createContentMail("Feedback-With-Change: " + currentFeedback.getType().name(),
+							"transactionId: " + transactionId + " saved: " + path);
 
 			}
 			FileHelper.writeCryptedObject(outputStream, cryption,
@@ -173,7 +184,8 @@ public class UserRequestHandler {
 
 		case SubmitModeration:
 			ModerationTask moderation = (ModerationTask) JsonHelper.parseJsonAndroid(info, ModerationTask.class);
-			//ModerationTask moderation = (ModerationTask) request.getInformation();
+			// ModerationTask moderation = (ModerationTask)
+			// request.getInformation();
 			trust = 0;
 
 			// process
@@ -197,12 +209,13 @@ public class UserRequestHandler {
 			break;
 
 		case GetUserData:
-			Long userinfo=(Long) JsonHelper.parseJson(info, Long.class);
-			if(userinfo==null)
-				userinfo=0L;
-			
-			System.out.println(userinfo+ " "+user+" ");
-			UserStatus userStatus = helper.getUserStatus(user, userinfo);//(Long) request.getInformation());
+			Long userinfo = (Long) JsonHelper.parseJson(info, Long.class);
+			if (userinfo == null)
+				userinfo = 0L;
+
+			System.out.println(userinfo + " " + user + " ");
+			UserStatus userStatus = helper.getUserStatus(user, userinfo);// (Long)
+																			// request.getInformation());
 			System.out.println("Get User Data: " + (userStatus != null));
 			FileHelper.writeCryptedObject(outputStream, cryption,
 					new RequestMessage(RequestType.GetUserData, userStatus));
@@ -211,8 +224,8 @@ public class UserRequestHandler {
 		case ChangeUserPosition:
 			System.out.println("change Home Position");
 			// action
-			Coordinate c=(Coordinate) JsonHelper.parseJson(info, Coordinate.class);
-			//Coordinate c = (Coordinate) request.getInformation();
+			Coordinate c = (Coordinate) JsonHelper.parseJson(info, Coordinate.class);
+			// Coordinate c = (Coordinate) request.getInformation();
 			helper.changeUserPosition(Point.from(c.y, c.x), user);
 
 			FileHelper.writeCryptedObject(outputStream, cryption,
@@ -222,8 +235,9 @@ public class UserRequestHandler {
 		case ChangeUserName:
 			// TODO
 			// action
-			helper.changeUserName(/*(String) request.getInformation()*/(String)JsonHelper.parseJson(info, String.class), user);
-	
+			helper.changeUserName(
+					/* (String) request.getInformation() */(String) JsonHelper.parseJson(info, String.class), user);
+
 			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.ChangeUserName, null));
 			return 0;
 
@@ -242,14 +256,15 @@ public class UserRequestHandler {
 
 		case RequestTransaction:
 			System.out.println("received");
-		
-			Integer requestId=(Integer)JsonHelper.parseJsonAndroid(info, Integer.class);
-			if(requestId==null)
-				requestId=0;
-			
-		//	System.out.println((Integer) request.getInformation() + " +transaction");
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestTransaction,
-					helper.getSubmit(requestId)));
+
+			Integer requestId = (Integer) JsonHelper.parseJsonAndroid(info, Integer.class);
+			if (requestId == null)
+				requestId = 0;
+
+			// System.out.println((Integer) request.getInformation() + "
+			// +transaction");
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.RequestTransaction, helper.getSubmit(requestId)));
 			System.out.println("answered");
 			return 0;
 
@@ -258,57 +273,66 @@ public class UserRequestHandler {
 			return -1;
 
 		case ConfirmTransaction:
-			// TODO
+			int toConfirm = (Integer) JsonHelper.parseJson(info, Integer.class);
+			helper.confirmTransaction(toConfirm);
 			return -1;
 
 		case DismissTransaction:
-			// TODO
+			int toDismiss = (Integer) JsonHelper.parseJson(info, Integer.class);
+			helper.dismissTransaction(toDismiss);
 			return -1;
 
 		case RequestFeedbacks:
-			type = new TypeToken<ArrayList<Long>>(){}.getType();
-			ArrayList<Long> requestMessage=(ArrayList<Long>)JsonHelper.parseJsonAndroid(info, type);
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestFeedbacks,new ArrayList<>(helper.getFeedbacks(requestMessage))));
+			type = new TypeToken<ArrayList<Long>>() {
+			}.getType();
+			ArrayList<Long> requestMessage = (ArrayList<Long>) JsonHelper.parseJsonAndroid(info, type);
+			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestFeedbacks,
+					new ArrayList<>(helper.getFeedbacks(requestMessage))));
 			return 0;
 
 		case RequestFeedback:
-			Integer feedbackId=(Integer)JsonHelper.parseJsonAndroid(info, Integer.class);
-			if(feedbackId==null)
-				feedbackId=0;
-			
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestFeedback,(helper.getFeedback(feedbackId))));
+			Integer feedbackId = (Integer) JsonHelper.parseJsonAndroid(info, Integer.class);
+			if (feedbackId == null)
+				feedbackId = 0;
+
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.RequestFeedback, (helper.getFeedback(feedbackId))));
 			return 0;
-			
+
 		case ChangeFeedback:
-			FeedbackModel model=(FeedbackModel)JsonHelper.parseJsonAndroid(info, FeedbackModel.class);
+			FeedbackModel model = (FeedbackModel) JsonHelper.parseJsonAndroid(info, FeedbackModel.class);
 			helper.changeFeedback(model);
 			return -1;
-			
+
 		case RequestRoutes:
-			//(ArrayList<Integer>)request.getInformation()
-			type = new TypeToken<ArrayList<Integer>>(){}.getType();
-			ArrayList<Integer> rList=((ArrayList<Integer>)JsonHelper.parseJsonAndroid(info, type));
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestRoutes,new LinkedList<>(helper.getRoutes(rList))));
+			// (ArrayList<Integer>)request.getInformation()
+			type = new TypeToken<ArrayList<Integer>>() {
+			}.getType();
+			ArrayList<Integer> rList = ((ArrayList<Integer>) JsonHelper.parseJsonAndroid(info, type));
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.RequestRoutes, new LinkedList<>(helper.getRoutes(rList))));
 			return 0;
 
 		case RequestRoute:
-			type = new TypeToken<ArrayList<Integer>>(){}.getType();
-			rList=((ArrayList<Integer>)JsonHelper.parseJsonAndroid(info, type));
-			
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestRoute,new LinkedList<>(helper.getRoute(rList))));
+			type = new TypeToken<ArrayList<Integer>>() {
+			}.getType();
+			rList = ((ArrayList<Integer>) JsonHelper.parseJsonAndroid(info, type));
+
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.RequestRoute, new LinkedList<>(helper.getRoute(rList))));
 			return 0;
 
 		case ChangeRoute:
-			RouteVersionModel rvModel=(RouteVersionModel)JsonHelper.parseJsonAndroid(info, RouteVersionModel.class);
+			RouteVersionModel rvModel = (RouteVersionModel) JsonHelper.parseJsonAndroid(info, RouteVersionModel.class);
 			helper.addRoute(rvModel);
 			return -1;
 
 		case RequestUser:
-			String rUser=(String)JsonHelper.parseJson(info, String.class);
-			FileHelper.writeCryptedObject(outputStream, cryption, new RequestMessage(RequestType.RequestUser,
-					helper.requestUserById(rUser)));
+			String rUser = (String) JsonHelper.parseJson(info, String.class);
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.RequestUser, helper.requestUserById(rUser)));
 			return 0;
-			
+
 		case ChangeUser:
 			helper.changeUser(info);
 			return -1;
@@ -316,11 +340,39 @@ public class UserRequestHandler {
 		case CreateHighscore:
 			helper.createHighscore();
 			return -1;
-			
+
 		case DeployRoutes:
 			helper.deployRoutes();
 			return -1;
-			
+
+		case CreateMapBoard:
+			helper.createMapBoard();
+			return -1;
+
+		case AddValueToMapBoard:
+			MapBoardModelField value = (MapBoardModelField) JsonHelper.parseJson(info, MapBoardModelField.class);
+			helper.addMapBoardValue(value);
+			return -1;
+
+		case DeployMapBoard:
+			helper.deployMapBoard();
+			return -1;
+
+		case DeployStatistics:
+			helper.deployTransactionStatistics();
+			return -1;
+
+		case AcceptSubmit:
+			int transactionid = (Integer) JsonHelper.parseJson(info, Integer.class);
+			boolean accepted=helper.acceptTask(transactionid, inputProcessor);
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.AcceptSubmit, accepted));
+			return 0;
+
+		case AcceptChange:
+			helper.acceptChange();
+			return -1;
+
 		case close:
 			System.out.println("close conncection to user: " + user);
 			return -1;

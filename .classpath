@@ -24,5 +24,14 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="/Geocoding test/lib/graphhopper-core-0.9-SNAPSHOT.jar"/>
+	<classpathentry kind="lib" path="/Users/martinwurflein/.m2/repository/org/hsqldb/hsqldb/2.3.0/hsqldb-2.3.0.jar">
+		<attributes>
+			<attribute name="maven.pomderived" value="true"/>
+			<attribute name="maven.groupId" value="org.hsqldb"/>
+			<attribute name="maven.artifactId" value="hsqldb"/>
+			<attribute name="maven.version" value="2.3.0"/>
+			<attribute name="maven.scope" value="compile"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>

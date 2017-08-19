@@ -22,9 +22,11 @@ import com.graphhopper.chilango.FileHelper;
 import com.graphhopper.chilango.data.Feedback;
 import com.graphhopper.chilango.data.JsonHelper;
 import com.graphhopper.chilango.data.ModerationTask;
+import com.graphhopper.chilango.data.Route;
 import com.graphhopper.chilango.data.RouteQuestionary;
 import com.graphhopper.chilango.data.UserStatus;
 import com.graphhopper.chilango.data.database.FeedbackModel;
+import com.graphhopper.chilango.data.database.MapBoardModelField;
 import com.graphhopper.chilango.data.database.PointModel;
 import com.graphhopper.chilango.data.database.QuestionaryModel;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
@@ -102,6 +104,13 @@ public class DBHelper {
 			return userId;
 		else
 			userId = MongoDB.getUserId(db, mail);
+
+		return userId;
+	}
+
+	public String getUserId(int transactionId) {
+		String userId = (String) MongoDB.getValueFromDataBase(db, "transactions", "transactionId", transactionId,
+				"userId");
 
 		return userId;
 	}
@@ -198,9 +207,18 @@ public class DBHelper {
 		return MongoDB.createNewTransactionId(db);
 	}
 
-	public void addPointsToUser(int transactionId, String currentUser, int revisorPoints, int creationPoints,
-			int submitType) {
-		MongoDB.addPointsToUser(db, transactionId, currentUser, revisorPoints, creationPoints, submitType, userId);
+	public void addPointsToUser(PointModel newPoints, String userId) {
+		MongoDB.addPointsToUser(db, newPoints, userId);
+	}
+
+	public void addPointsToMapBoard(Geometry geo, PointModel pointModel) {
+		if (geo == null)
+			return;
+
+		Integer team = (Integer) MongoDB.getValueFromDataBase(db, "users", "_id", new ObjectId(userId), "team");
+		if (team == null)
+			team = 0;
+		MongoDB.addPointsToMapBoard(db, geo, pointModel, team);
 	}
 
 	public void changeTransactionPoints(int transactionId, int revisorPoints, int creationPoints, String user) {
@@ -280,6 +298,11 @@ public class DBHelper {
 
 	}
 
+	public Route getRouteLastVersion(int id) {
+		int versions = 1;
+		return MongoDB.getRouteWithVersions(db, id, versions).get(0).getRoute();
+	}
+
 	public boolean addQuestionary(Feedback feedback) {
 		if (!checkAdmin())
 			return false;
@@ -289,7 +312,7 @@ public class DBHelper {
 
 	}
 
-	public boolean addFeedback(Feedback feedback) {
+	public boolean addFeedback(FeedbackModel feedback) {
 		if (!checkAdmin())
 			return false;
 		return MongoDB.addDocumentByObject(db, "feedbacks", feedback, "transactionId", feedback.getTransactionId());
@@ -336,5 +359,62 @@ public class DBHelper {
 		if (!checkAdmin())
 			return;
 		MongoDB.deployRoutes(db);
+	}
+
+	public void createMapBoard() {
+		if (!checkAdmin())
+			return;
+		MongoDB.createMapBoard(db);
+	}
+
+	public void deployMapBoard() {
+		if (!checkAdmin())
+			return;
+		MongoDB.deployMapBoard(db);
+
+	}
+
+	public void addMapBoardValue(MapBoardModelField value) {
+		if (!checkAdmin())
+			return;
+		MongoDB.addMapBoardValue(db, value);
+
+	}
+
+	public boolean acceptTask(int transactionId, InputProcesser inputProcessor) {
+
+		int type = (int) MongoDB.getValueFromDataBase(db, "transactions", "transactionId", transactionId, "type");
+		SubmitType submit = SubmitType.getByValue(type);
+		boolean confirm = false;
+		if (submit == SubmitType.submit_base_indication || submit == SubmitType.submit_new_draw_route
+				|| submit == SubmitType.submit_new_gps_route || submit == SubmitType.submit_route
+				|| submit == SubmitType.submit_route_indication) {
+			confirm = inputProcessor.acceptTask(transactionId,submit);
+		} else {
+			confirm = inputProcessor.acceptFeedback(transactionId);
+		}
+		if (confirm) {
+			confirmTransaction(transactionId);
+			System.out.println(transactionId + " confirmed");
+		}
+		return confirm;
+	}
+
+	public void acceptChange() {
+		// TODO Auto-generated method stub
+
+	}
+
+	public void dismissTransaction(int toDismiss) {
+		MongoDB.updateValueInTable(db, "transactions", "status", -1, "transactionId", toDismiss);
+	}
+
+	public void confirmTransaction(int toDismiss) {
+		MongoDB.updateValueInTable(db, "transactions", "status", 1, "transactionId", toDismiss);
+	}
+
+	public void deployTransactionStatistics() {
+		MongoDB.deployStatistics(db);
+
 	}
 }

@@ -7,12 +7,15 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.TreeMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.Collections;
 
@@ -35,6 +38,7 @@ import com.google.gson.GsonBuilder;
 import com.graphhopper.chilango.FileHelper;
 import com.graphhopper.chilango.data.InterfaceAdapter;
 import com.graphhopper.chilango.data.JsonHelper;
+import com.graphhopper.chilango.data.MapBoard;
 import com.graphhopper.chilango.data.Route;
 import com.graphhopper.chilango.data.RouteHelper;
 import com.graphhopper.chilango.data.Status;
@@ -49,6 +53,7 @@ import com.graphhopper.chilango.data.database.RankingModel;
 import com.graphhopper.chilango.data.database.UserModel;
 
 import com.graphhopper.chilango.data.database.FeedbackModel;
+import com.graphhopper.chilango.data.database.MapBoardModelField;
 import com.graphhopper.chilango.network.ConnectionMessage;
 import com.graphhopper.chilango.network.ConnectionMessage.ConnectionInformation;
 import com.mongodb.BasicDBList;
@@ -56,14 +61,18 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoCredential;
+import com.mongodb.QueryBuilder;
 import com.mongodb.ServerAddress;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.Updates;
 import com.mongodb.util.JSON;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.not;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.graphhopper.chilango.network.Constants;
 
@@ -75,7 +84,8 @@ import io.jsonwebtoken.SignatureException;
 
 public class MongoDB {
 	static private Gson gson = new GsonBuilder().registerTypeAdapterFactory(new GeometryAdapterFactory())
-			.registerTypeAdapterFactory(new JtsAdapterFactory()).registerTypeAdapter(SubmitTypeInterface.class, new InterfaceAdapter<SubmitTypeInterface>()).create();
+			.registerTypeAdapterFactory(new JtsAdapterFactory())
+			.registerTypeAdapter(SubmitTypeInterface.class, new InterfaceAdapter<SubmitTypeInterface>()).create();
 
 	public static String createToken(String user) {
 		byte[] key = getSignatureKey();
@@ -377,6 +387,17 @@ public class MongoDB {
 
 	}
 
+	public static Object getValueFromDataBase(MongoDatabase db, String collection, String identVariable,
+			Object identValue, String field) {
+
+		Document myDoc = documentOfValueInDataBase(db, collection, identVariable, identValue);
+		if (myDoc != null) {
+			return myDoc.get(field);
+		}
+		return null;
+
+	}
+
 	public static Document documentOfValueInDataBase(MongoDatabase db, String collection, String variable,
 			Object value) {
 		MongoCollection<Document> userCollection = db.getCollection(collection);
@@ -411,6 +432,8 @@ public class MongoDB {
 
 		return false;
 	}
+	
+
 
 	public static boolean updateValueInTable(MongoDatabase db, String collection, String variable, Object value,
 			String identifierName, Object identifier) {
@@ -490,23 +513,24 @@ public class MongoDB {
 			Document doc = cursor.next();
 
 			String json = com.mongodb.util.JSON.serialize(doc);
-			System.out.println("retrieved: "+json);
+			System.out.println("retrieved: " + json);
 			UserModel current = (UserModel) gson.fromJson(json, UserModel.class);
 
 			Integer points = 0;
 			Integer revisePoints = 0;
 			Integer creationPoints = 0;
-			if (current.getPointModel()!=null) {
+			if (current.getPointModel() != null) {
 				for (PointModel point : current.getPointModel()) {
 					points += point.getCreatorPoints() + point.getRevisorPoints();
-			//		if ((new Date(point.getTime()))
-			//				.after(new Date(System.currentTimeMillis() - 31 * 24 * 60 * 60 * 1000))) {
-						revisePoints += point.getRevisorPoints();
-						creationPoints += point.getCreatorPoints();
-			//		}
+					// if ((new Date(point.getTime()))
+					// .after(new Date(System.currentTimeMillis() - 31 * 24 * 60
+					// * 60 * 1000))) {
+					revisePoints += point.getRevisorPoints();
+					creationPoints += point.getCreatorPoints();
+					// }
 				}
 			}
-			
+
 			String id = ((ObjectId) doc.get("_id")).toString();
 
 			List<String> ids = null;
@@ -536,8 +560,8 @@ public class MongoDB {
 
 		}
 
-		List<RankingModel> highscoreBest=new LinkedList<>();
-		
+		List<RankingModel> highscoreBest = new LinkedList<>();
+
 		collection = db.getCollection("highscore");
 		collection.deleteMany(new Document()); // resets collection
 
@@ -550,20 +574,20 @@ public class MongoDB {
 
 				RankingModel model = new RankingModel(user, points, place);
 
-				if(place<=10)
-					highscoreBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
-				
+				if (place <= 10)
+					highscoreBest.add(new RankingModel(getUserModel(db, model.getId()).getName(), points, place));
+
 				String json = gson.toJson(model);// data is User DTO, just
-				System.out.println("try to input: "+json+ " "+model.getId()+" "+model.getPoints());
-				
+				System.out.println("try to input: " + json + " " + model.getId() + " " + model.getPoints());
+
 				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
 				collection.insertOne(new Document(document1));
 				place++;
 			}
 
 		}
-		
-		List<RankingModel> reviserBest=new LinkedList<>();
+
+		List<RankingModel> reviserBest = new LinkedList<>();
 
 		collection = db.getCollection("reviser_highscore");
 		collection.deleteMany(new Document()); // resets collection
@@ -577,10 +601,9 @@ public class MongoDB {
 
 				RankingModel model = new RankingModel(user, points, place);
 
+				if (place <= 10)
+					reviserBest.add(new RankingModel(getUserModel(db, model.getId()).getName(), points, place));
 
-				if(place<=10)
-					reviserBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
-				
 				String json = gson.toJson(model);// data is User DTO, just
 
 				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
@@ -590,9 +613,8 @@ public class MongoDB {
 
 		}
 
+		List<RankingModel> creatorBest = new LinkedList<>();
 
-		List<RankingModel> creatorBest=new LinkedList<>();
-		
 		collection = db.getCollection("creator_highscore");
 		collection.deleteMany(new Document()); // resets collection
 
@@ -605,9 +627,9 @@ public class MongoDB {
 
 				RankingModel model = new RankingModel(user, points, place);
 
-				if(place<=10)
-					creatorBest.add(new RankingModel(getUserModel(db,model.getId()).getName(),points,place));
-				
+				if (place <= 10)
+					creatorBest.add(new RankingModel(getUserModel(db, model.getId()).getName(), points, place));
+
 				String json = gson.toJson(model);// data is User DTO, just
 
 				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
@@ -616,9 +638,8 @@ public class MongoDB {
 			}
 
 		}
-		
-		DataCreater.writeHighscores(highscoreBest,reviserBest,creatorBest);
 
+		DataCreater.writeHighscores(highscoreBest, reviserBest, creatorBest);
 
 	}
 
@@ -680,6 +701,65 @@ public class MongoDB {
 			cursor.close();
 		}
 		return doneRoutes;
+	}
+	
+	public static void deployStatistics(MongoDatabase db){
+
+		MongoCollection<Document> currentCollection = db.getCollection("users");
+		FindIterable<Document> total = currentCollection.find();
+		MongoCursor<Document> cursor = total.iterator();
+
+		int userCount=0;
+		int usersConfirmed=0;
+		int team[]=new int[4];
+		int workpoints=0;
+		try {
+			while (cursor.hasNext()) {
+				Document doc = cursor.next();
+				String json = com.mongodb.util.JSON.serialize(doc);
+				UserModel model=(UserModel)JsonHelper.parseJson(json, UserModel.class);
+				userCount++;
+				if(model.isMail_confirmation()==true)
+					usersConfirmed++;
+				
+				team[model.getTeam()]++;
+				
+				if(model.getWorkPoint().lat()!=0.0 && model.getWorkPoint().lon()!=0.0)
+					workpoints++;
+				
+			}
+		} finally {
+			cursor.close();
+		}
+		String userReport="total users: "+userCount+" confirmed: "+usersConfirmed+" workpoint set: "+workpoints+" teamdistribution "+team[0]+" "+team[1]+" "+team[2]+" "+team[3];
+		
+		currentCollection = db.getCollection("transactions");
+
+		total = currentCollection.find(not(eq("status", -1)));
+		cursor = total.iterator();
+		Map<Integer,List<String>> countMap=new HashMap<>();
+		Set<String> users=new HashSet<>();
+
+		try {
+			while (cursor.hasNext()) {
+				Document doc = cursor.next();
+				String json = com.mongodb.util.JSON.serialize(doc);
+				TransactionModel model=(TransactionModel)JsonHelper.parseJson(json, TransactionModel.class);
+				List<String> transactions;
+				if(countMap.containsKey(model.getType())){
+					transactions=countMap.get(model.getType());
+				}else{
+					transactions=new LinkedList<>();
+					countMap.put(model.getType(), transactions);
+				}
+				transactions.add(SubmitType.getByValue(model.getType())+" - user: "+model.getUserId()+" at: "+model.getInputTime());
+				users.add(model.getUserId());
+			}
+		} finally {
+			cursor.close();
+		}
+
+		DataCreater.writeStatistics(countMap,users,userReport);
 	}
 
 	public static List<String> getOpenTransactions(MongoDatabase db, String user) {
@@ -746,11 +826,8 @@ public class MongoDB {
 		return transactions;
 	}
 
-	public static void addPointsToUser(MongoDatabase db, int transactionId, String currentUser, int revisorPoints,
-			int creationPoints, int submitType, String user) {
+	public static void addPointsToUser(MongoDatabase db, PointModel newPoints, String user) {
 		MongoCollection<Document> currentCollection = db.getCollection("users");
-		PointModel newPoints = new PointModel(transactionId, creationPoints, revisorPoints, System.currentTimeMillis(),
-				submitType);
 
 		BasicDBObject push = (BasicDBObject) JSON.parse(gson.toJson(newPoints));
 
@@ -938,28 +1015,181 @@ public class MongoDB {
 			curs.close();
 		}
 	}
-	
-	public static void deployRoutes(MongoDatabase db){
-		TreeMap<Integer,Route> routes=new TreeMap<>();
-		
+
+	public static void deployRoutes(MongoDatabase db) {
+		TreeMap<Integer, Route> routes = new TreeMap<>();
+
 		MongoCollection<Document> routeCollection = db.getCollection("routes");
 
 		MongoCursor<Document> curs = routeCollection.find().iterator();
-		
+
 		try {
 			while (curs.hasNext()) {
 				Document doc = curs.next();
 				RouteModel model = (RouteModel) JsonHelper.parseJson(convertToJson(doc), RouteModel.class);
-				
-				if(model!=null && model.getRoutes()!=null)
-				routes.put(model.getRouteId(), model.getRoutes().get(model.getRoutes().size()-1).getRoute());
+
+				if (model != null && model.getRoutes() != null && !model.isInvalid())
+					routes.put(model.getRouteId(), model.getRoutes().get(model.getRoutes().size() - 1).getRoute());
 			}
 		} finally {
 			curs.close();
 		}
-		
+
 		DataCreater.writeRoutes(routes);
-		
+
 	}
+
+	public static void createMapBoard(MongoDatabase db) {
+		MongoCollection<Document> collection = db.getCollection("mapboard");
+
+		collection.deleteMany(new Document()); // resets collection
+
+		collection.createIndex(Indexes.geo2dsphere("ring"));
+
+		for (int x = 0; x < MapBoard.gridSizeLat; x++)
+			for (int y = 0; y < MapBoard.gridSizeLon; y++) {
+				MapBoardModelField model = new MapBoardModelField(x, y);
+
+				String json = gson.toJson(model);// data is User DTO, just
+													// pojo!
+
+				BasicDBObject document1 = (BasicDBObject) JSON.parse(json);
+				collection.insertOne(new Document(document1));
+
+			}
+
+	}
+
+	public static void deployMapBoard(MongoDatabase db) {
+		MapBoard board = new MapBoard();
+
+		MongoCollection<Document> collection = db.getCollection("mapboard");
+
+		MongoCursor<Document> curs = collection.find().iterator();
+
+		try {
+			while (curs.hasNext()) {
+
+				Document doc = curs.next();
+				MapBoardModelField model = (MapBoardModelField) JsonHelper.parseJson(convertToJson(doc),
+						MapBoardModelField.class);
+
+				if (model != null) {
+					short[] values = model.calculateFieldValues();
+					for (int i = 0; i < MapBoard.contentSize; i++) {
+						board.addMapContent(model.x, model.y, i, values[i]);
+					}
+				}
+				model.calculateFieldValues();
+			}
+		} finally {
+			curs.close();
+		}
+
+		DataCreater.writeMapBoard(board);
+	}
+
+	public static void addPointsToMapBoard(MongoDatabase db, Geometry geometry, PointModel points, int team) {
+		MongoCollection<Document> collection = db.getCollection("mapboard");
+
+		String geometryJson = JsonHelper.createJsonFromObject(geometry);
+
+		BasicDBObject geometryBson = (BasicDBObject) JSON.parse(geometryJson);
+		System.out.println("beginn search with geometry: " + geometryJson + " --- " + geometryBson.toString());
+		FindIterable<Document> docs = collection.find(Filters.geoIntersects("ring", geometryBson));
+
+		MongoCursor<Document> cursorCount = docs.iterator();
+
+		int i = 0;
+		List<ObjectId> ids = new LinkedList<>();
+		while (cursorCount.hasNext()) {
+			i++;
+			Document doc = cursorCount.next();
+			ids.add(doc.getObjectId("_id"));
+			System.out.println("meets " + doc.getInteger("x", -1) + "," + doc.getInteger("y", -1));
+		}
+		System.out.println("found " + ids.size());
+
+		for (ObjectId id : ids) {
+
+			PointModel newPoints = new PointModel(points.getTransactionId(), points.getCreatorPoints() / ids.size(),
+					points.getRevisorPoints() / ids.size(), points.getTime(), points.getSubmitType());
+
+			Document doc = collection.find(eq("_id", id)).first();
+			if (doc != null) {
+				///
+				String json = com.mongodb.util.JSON.serialize(doc);
+
+				MapBoardModelField field = (MapBoardModelField) gson.fromJson(json, MapBoardModelField.class);
+
+				field.addPointModel( team,newPoints);
+				json = gson.toJson(field);// data is User DTO, just pojo!
+
+				System.out.println("Add Value to mapboard: " + json);
+
+				BasicDBObject updateFields = (BasicDBObject) JSON.parse(json);
+
+				BasicDBObject updateQuery = new BasicDBObject();
+				updateQuery.put("$set", updateFields);
+
+				collection.findOneAndUpdate(eq("_id", id), updateQuery);
+			}
+			///
+			// BasicDBObject push = (BasicDBObject)
+			/// JSON.parse(gson.toJson(newPoints));
+			// Document doc = collection.findOneAndUpdate(eq("_id", id),
+			// Updates.push("points.", push));
+
+		}
+	}
+
+	public static void addMapBoardValue(MongoDatabase db, MapBoardModelField value, ObjectId id) {
+		MongoCollection<Document> collection = db.getCollection("mapboard");
+
+		BasicDBObject search;
+
+		if (id == null)
+			search = (BasicDBObject) QueryBuilder.start("x").is(value.x).and("y").is(value.y).get();
+		else
+			search = (BasicDBObject) QueryBuilder.start("_id").is(id).get();
+
+		Document doc = collection.find(search).first();
+
+		if (doc == null) {
+			String json = gson.toJson(value);// data is User DTO, just pojo!
+			BasicDBObject insert = (BasicDBObject) JSON.parse(json);
+			collection.insertOne(new Document(insert));
+
+			System.out.println("Add Value to mapboard: " + "there was no such field");
+		} else {
+			String json = com.mongodb.util.JSON.serialize(doc);
+
+			MapBoardModelField field = (MapBoardModelField) gson.fromJson(json, MapBoardModelField.class);
+
+			int i = 0;
+			for (List<PointModel> list : value.getPoints()) {
+				field.getPoints()[i].addAll(list);
+				i++;
+			}
+
+			json = gson.toJson(field);// data is User DTO, just pojo!
+
+			System.out.println("Add Value to mapboard: " + json);
+
+			BasicDBObject updateFields = (BasicDBObject) JSON.parse(json);
+
+			BasicDBObject updateQuery = new BasicDBObject();
+			updateQuery.put("$set", updateFields);
+
+			collection.findOneAndUpdate(search, updateQuery);
+
+		}
+
+	}
+
+	public static void addMapBoardValue(MongoDatabase db, MapBoardModelField value) {
+		addMapBoardValue(db, value, null);
+	}
+	
 
 }
