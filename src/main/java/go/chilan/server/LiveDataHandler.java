@@ -17,6 +17,16 @@ public class LiveDataHandler {
 	private static ArrayList<LiveRide> rides = new ArrayList<>();
 
 	synchronized public static void addValue(LiveRideUser ride) {
+		if(ride.getTransportId()==1203 && ride.getUserId().equals("599d1d459194be000102c07b"))
+			ride=new LiveRideUser(ride.getLat(),ride.getLon(),ride.getTimeStamp(),1206, ride.getHeading(),ride.getFull(), ride.getUserId()
+			,ride.getRat(),ride.isGame());
+		
+		if(ride.getTransportId()==1202 && ride.getUserId().equals("599d1d459194be000102c07b"))
+			ride=new LiveRideUser(ride.getLat(),ride.getLon(),ride.getTimeStamp(),1203, ride.getHeading(),ride.getFull(), ride.getUserId()
+			,ride.getRat(),ride.isGame());
+		
+
+		
 		cleanValues(System.currentTimeMillis(), ride.getUserId());
 		live_rides.put(System.currentTimeMillis(), ride);
 		System.out.println(System.currentTimeMillis() + " lat:" + ride.getLat() + "  lon:" + ride.getLon() + " "
@@ -54,7 +64,7 @@ public class LiveDataHandler {
 		}
 
 		for (Long key : live_rides.keySet()) {
-			rides.add(live_rides.get(key));
+			rides.add((LiveRide)live_rides.get(key));
 		}
 		lastRetrieved = System.currentTimeMillis();
 		return rides;

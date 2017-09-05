@@ -70,6 +70,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.DeleteResult;
 import com.mongodb.util.JSON;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.not;
@@ -432,8 +433,6 @@ public class MongoDB {
 
 		return false;
 	}
-	
-
 
 	public static boolean updateValueInTable(MongoDatabase db, String collection, String variable, Object value,
 			String identifierName, Object identifier) {
@@ -702,64 +701,89 @@ public class MongoDB {
 		}
 		return doneRoutes;
 	}
-	
-	public static void deployStatistics(MongoDatabase db){
+
+	public static void deployStatistics(MongoDatabase db) {
 
 		MongoCollection<Document> currentCollection = db.getCollection("users");
 		FindIterable<Document> total = currentCollection.find();
 		MongoCursor<Document> cursor = total.iterator();
 
-		int userCount=0;
-		int usersConfirmed=0;
-		int team[]=new int[4];
-		int workpoints=0;
+		int userCount = 0;
+		int usersConfirmed = 0;
+		int team[] = new int[4];
+		int workpoints = 0;
 		try {
 			while (cursor.hasNext()) {
 				Document doc = cursor.next();
 				String json = com.mongodb.util.JSON.serialize(doc);
-				UserModel model=(UserModel)JsonHelper.parseJson(json, UserModel.class);
+				UserModel model = (UserModel) JsonHelper.parseJson(json, UserModel.class);
 				userCount++;
-				if(model.isMail_confirmation()==true)
+				if (model.isMail_confirmation() == true)
 					usersConfirmed++;
-				
+
 				team[model.getTeam()]++;
-				
-				if(model.getWorkPoint().lat()!=0.0 && model.getWorkPoint().lon()!=0.0)
+
+				if (model.getWorkPoint().lat() != 0.0 && model.getWorkPoint().lon() != 0.0)
 					workpoints++;
-				
+
 			}
 		} finally {
 			cursor.close();
 		}
-		String userReport="total users: "+userCount+" confirmed: "+usersConfirmed+" workpoint set: "+workpoints+" teamdistribution "+team[0]+" "+team[1]+" "+team[2]+" "+team[3];
-		
+		String userReport = "total users: " + userCount + " confirmed: " + usersConfirmed + " workpoint set: "
+				+ workpoints + " teamdistribution " + team[0] + " " + team[1] + " " + team[2] + " " + team[3];
+
 		currentCollection = db.getCollection("transactions");
 
 		total = currentCollection.find(not(eq("status", -1)));
 		cursor = total.iterator();
-		Map<Integer,List<String>> countMap=new HashMap<>();
-		Set<String> users=new HashSet<>();
+		Map<Integer, List<String>> countMap = new HashMap<>();
+		Set<String> users = new HashSet<>();
 
 		try {
 			while (cursor.hasNext()) {
 				Document doc = cursor.next();
 				String json = com.mongodb.util.JSON.serialize(doc);
-				TransactionModel model=(TransactionModel)JsonHelper.parseJson(json, TransactionModel.class);
+				TransactionModel model = (TransactionModel) JsonHelper.parseJson(json, TransactionModel.class);
 				List<String> transactions;
-				if(countMap.containsKey(model.getType())){
-					transactions=countMap.get(model.getType());
-				}else{
-					transactions=new LinkedList<>();
+				if (countMap.containsKey(model.getType())) {
+					transactions = countMap.get(model.getType());
+				} else {
+					transactions = new LinkedList<>();
 					countMap.put(model.getType(), transactions);
 				}
-				transactions.add(SubmitType.getByValue(model.getType())+" - user: "+model.getUserId()+" at: "+model.getInputTime());
+				transactions.add(SubmitType.getByValue(model.getType()) + " - user: " + model.getUserId() + " at: "
+						+ model.getInputTime());
 				users.add(model.getUserId());
 			}
 		} finally {
 			cursor.close();
 		}
 
-		DataCreater.writeStatistics(countMap,users,userReport);
+		DataCreater.writeStatistics(countMap, users, userReport);
+	}
+
+	public static List<TransactionModel> getTransactions(MongoDatabase db, List<Integer> transactions) {
+		List<TransactionModel> models=new LinkedList<>();
+		MongoCollection<Document> currentCollection = db.getCollection("transactions");
+		FindIterable<Document> results = currentCollection.find();
+		MongoCursor<Document> cursor = results.iterator();
+		try {
+			while (cursor.hasNext()) {
+				Document doc = cursor.next();
+				if(transactions.contains(doc.getInteger("transactionId"))){
+				String json = com.mongodb.util.JSON.serialize(doc);
+				TransactionModel transaction = (TransactionModel) gson.fromJson(convertToJson(doc),
+						TransactionModel.class);
+				models.add(transaction);
+				}
+			}
+		} finally {
+			cursor.close();
+		}
+		
+		return models;
+		
 	}
 
 	public static List<String> getOpenTransactions(MongoDatabase db, String user) {
@@ -840,7 +864,7 @@ public class MongoDB {
 		if (updateUserPoints(db, user) == false)
 			System.out.println("error");
 		else
-			System.out.println("points added :-");
+			System.out.println("points added :-)");
 
 	}
 
@@ -956,6 +980,16 @@ public class MongoDB {
 			routeCollection.insertOne(new Document(document1));
 
 		}
+	}
+
+	public static Geometry getRouteGeometry(MongoDatabase db, int id) {
+		Document doc = documentOfValueInDataBase(db, "routes", "routeId", id);
+		if (doc == null)
+			return null;
+
+		RouteModel model = (RouteModel) JsonHelper.parseJson(convertToJson(doc), RouteModel.class);
+
+		return model.getGeometry();
 	}
 
 	public static List<RouteVersionModel> getRouteWithVersions(MongoDatabase db, int routeId, int lastVersions) {
@@ -1122,7 +1156,7 @@ public class MongoDB {
 
 				MapBoardModelField field = (MapBoardModelField) gson.fromJson(json, MapBoardModelField.class);
 
-				field.addPointModel( team,newPoints);
+				field.addPointModel(team, newPoints);
 				json = gson.toJson(field);// data is User DTO, just pojo!
 
 				System.out.println("Add Value to mapboard: " + json);
@@ -1190,6 +1224,88 @@ public class MongoDB {
 	public static void addMapBoardValue(MongoDatabase db, MapBoardModelField value) {
 		addMapBoardValue(db, value, null);
 	}
-	
+
+	public static void cleanDoubleFeedbacksEntries(MongoDatabase db) {
+
+		List<Integer> duplicates = new LinkedList<>();
+
+		MongoCollection<Document> currentCollection = db.getCollection("feedbacks");
+		FindIterable<Document> results = currentCollection.find();
+		MongoCursor<Document> cursor = results.iterator();
+
+		try {
+			while (cursor.hasNext()) {
+				Document doc = cursor.next();
+
+				String json = com.mongodb.util.JSON.serialize(doc);
+				FeedbackModel current = (FeedbackModel) gson.fromJson(json, FeedbackModel.class);
+				List<Integer> ids = checkDuplicateFeedback(db, current);
+				for (Integer id : ids) {
+					if (id != current.getTransactionId()) {
+						System.out.println("delte: " + id);
+						MongoDB.removeEntry(db, "feedbacks", "transactionId", id);
+						MongoDB.removeEntry(db, "transactions", "transactionId", id);
+
+					}
+				}
+				if (ids.size() > 1) {
+					System.out.println("-----------");
+					cleanDoubleFeedbacksEntries(db);
+					return;
+
+				}
+			}
+		} finally {
+
+			cursor.close();
+		}
+
+	}
+
+	private static void removeEntry(MongoDatabase db, String collection, String identifier, Object value) {
+
+		MongoCollection<Document> currentCollection = db.getCollection(collection);
+
+		DeleteResult deleteResult = currentCollection.deleteOne(eq(identifier, value));
+		System.out.println("deleted :" + deleteResult.toString());
+	}
+
+	public static List<Integer> checkDuplicateFeedback(MongoDatabase db, FeedbackModel feedback) {
+
+		List<Integer> duplicates = new LinkedList<>();
+
+		MongoCollection<Document> currentCollection = db.getCollection("feedbacks");
+		FindIterable<Document> results = currentCollection.find(eq("timestamp", feedback.getTimestamp()));
+		MongoCursor<Document> cursor = results.iterator();
+
+		try {
+			while (cursor.hasNext()) {
+
+				Document doc = cursor.next();
+
+				String json = com.mongodb.util.JSON.serialize(doc);
+				System.out.println("retrieved: " + json);
+				FeedbackModel current = (FeedbackModel) gson.fromJson(json, FeedbackModel.class);
+
+				// can be more
+				if (current.getLat() != feedback.getLat() || current.getLon() != feedback.getLon()
+						|| current.getRouteId() != feedback.getRouteId() || current.getType() != feedback.getType()) {
+					continue;
+				}
+				if (current.getComment() != null && feedback.getComment() != null) {
+					if (!current.getComment().equals(feedback.getComment()))
+						continue;
+				}
+
+				System.out.println(feedback.getTransactionId() + " duplicate: " + current.getTransactionId());
+				duplicates.add(current.getTransactionId());
+
+			}
+		} finally {
+			cursor.close();
+		}
+
+		return duplicates;
+	}
 
 }

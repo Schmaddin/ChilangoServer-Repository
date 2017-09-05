@@ -46,20 +46,21 @@ public class ServerLogic {
 		byte trust=(byte)Status.calculateStatusValue(userStatus.getPoints(), userStatus.getStatus().getStatusValue());
 		if(userStatus==null)
 			return -1;
-		System.out.println("we got the userStatus");
-		
+
+		System.out.println("trust by userstatus "+trust);
 		
 		float distance=GeoHelper.distanceToMultiLine(new Coordinate(userStatus.getLat(),userStatus.getLon()), coordinates);
 		
 		byte temp = TrustLevel.trustByDistance(distance);
-		System.out.println("trust: "+trust);
+
 		
 		distance=GeoHelper.distanceToMultiLine(new Coordinate(userStatus.getWorkLat(),userStatus.getWorkLon()), coordinates);
 		
 		byte temp2=TrustLevel.trustByDistance(distance);
 		
-		trust+=temp>=trust?temp:temp2;
-				
+		trust+=temp>=temp2?temp:temp2;
+		System.out.println("trust after geodistance: "+trust);
+		
 		return trust;
 	}
 

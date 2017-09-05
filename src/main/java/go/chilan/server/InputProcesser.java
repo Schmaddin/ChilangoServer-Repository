@@ -27,12 +27,12 @@ public class InputProcesser {
 	DBHelper client;
 	String currentUser;
 
-	public int handleFeedback(Feedback feedback, int transactionId ) {
+	public int handleFeedback(Feedback feedback, int transactionId, String user) {
 
 		int revisorPoints = 0;
 		int creationPoints = 0;
 		int status = 0;
-		
+
 		if (feedback.getQuestionary() != null)
 			client.addQuestionary(new Feedback(feedback, transactionId));
 
@@ -40,13 +40,11 @@ public class InputProcesser {
 			client.addFeedback(new FeedbackModel(feedback, transactionId, false));
 			return 0;
 		}
-		
+
 		switch (feedback.getType()) {
 		case route_not_found:
 			if (true)
 				status = 1;
-
-
 			break;
 		case route_not_exist:
 			if (true)
@@ -71,7 +69,6 @@ public class InputProcesser {
 		case route_ok:
 			// TODO
 			status = 1;
-
 
 			break;
 		case route_alright:
@@ -110,82 +107,98 @@ public class InputProcesser {
 			break;
 
 		}
-		
-		revisorPoints+=PointSystem.getRevisorPoints(feedback.getType(), feedback.isSuggestion());
-		creationPoints+=PointSystem.getCreationPoints(feedback.getType(), feedback.isSuggestion()); 
+
+		revisorPoints += PointSystem.getRevisorPoints(feedback.getType(), feedback.isSuggestion());
+		creationPoints += PointSystem.getCreationPoints(feedback.getType(), feedback.isSuggestion());
 		client.addFeedback(new FeedbackModel(feedback, transactionId, (status == 0 ? false : true)));
-		
-		if (creationPoints != 0 || revisorPoints != 0 && status > 0){
-			addFeedbackPoints(transactionId,creationPoints,revisorPoints,feedback);
+
+		if (creationPoints != 0 || revisorPoints != 0 && status > 0) {
+			addFeedbackPoints(transactionId, creationPoints, revisorPoints, feedback, user);
+			System.out.println("add c-points: " + creationPoints + " rPoints: " + creationPoints + " for transaction: "
+					+ transactionId);
 		}
 
 		return status;
 	}
-	
-	public boolean acceptFeedback(int transactionId){
-		FeedbackModel feedback=(FeedbackModel)JsonHelper.parseJson(client.getFeedback(transactionId),FeedbackModel.class);
-		if(feedback==null)
+
+	public boolean acceptFeedback(int transactionId) {
+		FeedbackModel feedback = (FeedbackModel) JsonHelper.parseJson(client.getFeedback(transactionId),
+				FeedbackModel.class);
+		if (feedback == null)
 			return false;
-		else{
-			addFeedbackPoints(transactionId,PointSystem.getRevisorPoints(feedback.getType(), feedback.isSuggestion()),PointSystem.getCreationPoints(feedback.getType(), feedback.isSuggestion()),feedback);
+		else {
+			addFeedbackPoints(transactionId, PointSystem.getRevisorPoints(feedback.getType(), feedback.isSuggestion()),
+					PointSystem.getCreationPoints(feedback.getType(), feedback.isSuggestion()), feedback,null);
 			feedback.setValid(true);
 			client.changeFeedback(feedback);
 		}
-			
+
 		return true;
 	}
-	
-	private void addFeedbackPoints(int transactionId,int creatonPoints,int revisorPoints,Feedback feedback){
-		PointModel points=new PointModel(transactionId,creatonPoints,revisorPoints,System.currentTimeMillis(),feedback.getType().getValue());
-		client.addPointsToUser(points,client.getUserId(transactionId));	
-		
-		Geometry geometry=null;
-		if(feedback.getRouteId()>0){
-			geometry=RouteHelper.getGeometry(client.getRouteLastVersion(feedback.getRouteId()));
-		}else if(feedback.getType()==SubmitType.route_gps_Validation){
-			geometry=RouteHelper.getGeometry(feedback.getRoute());
+
+	private void addFeedbackPoints(int transactionId, int creatonPoints, int revisorPoints, Feedback feedback,
+			String user) {
+		PointModel points = new PointModel(transactionId, creatonPoints, revisorPoints, System.currentTimeMillis(),
+				feedback.getType().getValue());
+
+		if (user == null)
+			user = client.getUserId(transactionId);
+
+		System.out.println("...to user: " + user);
+
+		client.addPointsToUser(points, user);
+
+		Geometry geometry = null;
+		if (feedback.getRouteId() > 0) {
+			geometry = RouteHelper.getGeometry(client.getRouteLastVersion(feedback.getRouteId()));
+		} else if (feedback.getType() == SubmitType.route_gps_Validation) {
+			geometry = RouteHelper.getGeometry(feedback.getRoute());
 		}
-			
-		client.addPointsToMapBoard(geometry,points);
+
+		client.addPointsToMapBoard(geometry, points);
 	}
 
 	public int handleModeration(ModerationTask moderation, int transactionId) {
 		return 0;
 	}
 
+	public int handleTask(ChilangoTask task, int transactionId, boolean accepted) {
 
-	public int handleTask(ChilangoTask task, int transactionId,boolean accepted) {
-
-		if(!accepted)
+		if (!accepted)
 			return 0;
-		else{
-			PointModel points=new PointModel(transactionId,PointSystem.getCreationPoints(task.getType(), false),0,System.currentTimeMillis(),task.getType().getValue());
-			client.addPointsToMapBoard(TaskHelper.getGeometry(task),points);
+		else {
+			PointModel points = new PointModel(transactionId, PointSystem.getCreationPoints(task.getType(), false), 0,
+					System.currentTimeMillis(), task.getType().getValue());
+			String user = client.getUserId(transactionId);
+			client.addPointsToUser(points, user);
+			client.addPointsToMapBoard(TaskHelper.getGeometry(task), points);
+
+			MailUser.createThankYouMail(client.getMail(user), client.getUserName(user),
+					"Registrar Ruta " + task.getName(), points.getCreatorPoints() + points.getRevisorPoints());
 			return 1;
 		}
 	}
 
 	public boolean acceptTask(int transactionId, SubmitType submit) {
-		RecordTask task=null;
-		switch(submit){
+		RecordTask task = null;
+		switch (submit) {
 		case submit_new_gps_route:
-			task=(GPSRecordTask)JsonHelper.parseJson(client.getSubmit(transactionId), GPSRecordTask.class);
+			task = (GPSRecordTask) JsonHelper.parseJson(client.getSubmit(transactionId), GPSRecordTask.class);
 			break;
 		case submit_new_draw_route:
-			task=(DrawRouteTask)JsonHelper.parseJson(client.getSubmit(transactionId), DrawRouteTask.class);
+			task = (DrawRouteTask) JsonHelper.parseJson(client.getSubmit(transactionId), DrawRouteTask.class);
 			break;
 		case submit_route_indication:
-			task=(RecordTask)JsonHelper.parseJson(client.getSubmit(transactionId), RecordTask.class);
-			break;		
+			task = (RecordTask) JsonHelper.parseJson(client.getSubmit(transactionId), RecordTask.class);
+			break;
 		}
-		
-		if(task==null)
+
+		if (task == null)
 			return false;
 		task.getIconId();
-		
-		handleTask(task,transactionId,true);
+
+		handleTask(task, transactionId, true);
 		return true;
 	}
-	
 
 }

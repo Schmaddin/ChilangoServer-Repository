@@ -23,6 +23,7 @@ import com.graphhopper.chilango.data.ModerationTask;
 import com.graphhopper.chilango.data.UserStatus;
 import com.graphhopper.chilango.data.database.RouteVersionModel;
 import com.graphhopper.chilango.data.database.SubmitTypeInterface;
+import com.graphhopper.chilango.data.database.TransactionModel;
 import com.graphhopper.chilango.data.database.FeedbackModel;
 import com.graphhopper.chilango.data.database.MapBoardModelField;
 import com.graphhopper.chilango.network.Constants;
@@ -83,8 +84,8 @@ public class UserRequestHandler {
 			// LiveRideUser ride = (LiveRideUser) request.getInformation();
 			LiveRideUser ride = (LiveRideUser) JsonHelper.parseJsonAndroid(info, LiveRideUser.class);
 
-			LiveDataHandler.addValue(new LiveRideUser(ride.getLat(), ride.getLon(), ride.getTimeStamp(),
-					ride.getTransportId(), ride.getHeading(), ride.getFull(), user, ride.isGame()));
+			LiveDataHandler.addValue(new LiveRideUser(ride.getLat(), ride.getLon(), System.currentTimeMillis(),
+					ride.getTransportId(), ride.getHeading(), ride.getFull(), user, ride.getRat(), ride.isGame()));
 
 			return -1;
 
@@ -100,13 +101,16 @@ public class UserRequestHandler {
 					SubmitTypeInterface.class);
 			ChilangoTask task = (ChilangoTask) get;
 			// process
-			path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
-					+ task.getType() + "-" + user) + ".task";
+
 
 			int routeId = 0;
 			byte trust = ServerLogic.calculateTrust(helper, user, TaskHelper.getGeometry(task));
 
 			int transactionId = (int) helper.createTransactionId();
+			
+			path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
+					+ task.getType() + "-" + transactionId) + ".task";
+			
 			int status = inputProcessor.handleTask(task, (int) transactionId, false);
 			boolean done = helper.addTransaction(path, task.getType(), user, status, routeId,
 					new Date(task.getLastEdit()), trust, TaskHelper.getGeneralizedGeometry(task, 0.25f),
@@ -122,6 +126,7 @@ public class UserRequestHandler {
 				task = new BusBaseTask((BusBaseTask) task, System.currentTimeMillis(), transactionId);
 			}
 
+			
 			FileHelper.writeObject(new File(path), task);
 			if (!done)
 				transactionId = 0;
@@ -141,16 +146,20 @@ public class UserRequestHandler {
 			for (String currentPath : feedbackMap.keySet()) {
 				Feedback currentFeedback = feedbackMap.get(currentPath);
 
+				FeedbackModel temp=new FeedbackModel(currentFeedback, -1, false);
+				List<Integer> duplicates=helper.checkFeedbacksForDoubleEntry(temp);
+				if(duplicates.size()==0){
+				
 				// process
 				path = (taskPath + "/" + FileHelper.recoverDate.format(new Date(System.currentTimeMillis())) + "-"
 						+ currentFeedback.getType() + "-" + user) + ".explicit";
 
-				// calculates trust depending on submitting position
-				Point point = Point.from(feedbackMap.get(currentPath).getLon(), feedbackMap.get(currentPath).getLat());
-				trust = ServerLogic.calculateTrust(helper, user, point);
+				// calculates trust depending on route
+				Geometry geometry = helper.getRouteGeometry(temp.getRouteId());
+				trust = ServerLogic.calculateTrust(helper, user, geometry);
 
 				transactionId = (int) helper.createTransactionId();
-				status = inputProcessor.handleFeedback(currentFeedback, (int) transactionId);
+				status = inputProcessor.handleFeedback(currentFeedback, (int) transactionId,user);
 				done = helper.addTransaction(path, currentFeedback.getType(), user, status,
 						currentFeedback.getRouteId(), new Date(currentFeedback.getTimestamp()), trust, null,
 						(int) transactionId, -1);
@@ -167,6 +176,9 @@ public class UserRequestHandler {
 				if (currentFeedback.isSuggestion())
 					MailUser.createContentMail("Feedback-With-Change: " + currentFeedback.getType().name(),
 							"transactionId: " + transactionId + " saved: " + path);
+				}else{
+					transactionResultList.put(currentPath, duplicates.get(0));
+				}
 
 			}
 			FileHelper.writeCryptedObject(outputStream, cryption,
@@ -269,7 +281,7 @@ public class UserRequestHandler {
 			return 0;
 
 		case ChangeTransaction:
-			helper.changeTransaction(request.getInformation());
+			helper.changeTransaction((String)JsonHelper.parseJson(request.getInformation(), String.class));
 			return -1;
 
 		case ConfirmTransaction:
@@ -339,6 +351,7 @@ public class UserRequestHandler {
 
 		case CreateHighscore:
 			helper.createHighscore();
+			helper.deployMapBoard();
 			return -1;
 
 		case DeployRoutes:
@@ -364,7 +377,7 @@ public class UserRequestHandler {
 
 		case AcceptSubmit:
 			int transactionid = (Integer) JsonHelper.parseJson(info, Integer.class);
-			boolean accepted=helper.acceptTask(transactionid, inputProcessor);
+			boolean accepted = helper.acceptTask(transactionid, inputProcessor);
 			FileHelper.writeCryptedObject(outputStream, cryption,
 					new RequestMessage(RequestType.AcceptSubmit, accepted));
 			return 0;
@@ -376,6 +389,29 @@ public class UserRequestHandler {
 		case close:
 			System.out.println("close conncection to user: " + user);
 			return -1;
+			
+		case CleanDoubleEntries:
+			helper.checkFeedbacksForDoubleEntry();
+			return -1;
+			
+		case CalculateTrustForFeedback:
+			transactionId = (Integer) JsonHelper.parseJson(info, Integer.class);
+			List<TransactionModel> transactions=helper.getTransaction(transactionId);
+			
+			if(transactions.size()==0)
+			{
+				System.out.println(transactionId+" no such transaction");
+				return -1;
+			}
+			
+		
+			// calculates trust depending on route
+			Geometry geometry = helper.getRouteGeometry(transactions.get(0).getRouteId());
+			trust = ServerLogic.calculateTrust(helper, transactions.get(0).getUserId(), geometry);
+			
+			FileHelper.writeCryptedObject(outputStream, cryption,
+					new RequestMessage(RequestType.CalculateTrustForFeedback, trust));
+			return 0;
 
 		}
 

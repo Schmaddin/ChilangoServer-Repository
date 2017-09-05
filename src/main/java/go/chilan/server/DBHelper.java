@@ -417,4 +417,42 @@ public class DBHelper {
 		MongoDB.deployStatistics(db);
 
 	}
+	
+	public List<TransactionModel> getTransaction(int transactionId) {
+		List<Integer> transactions=new LinkedList<>();
+		transactions.add(transactionId);
+		return MongoDB.getTransactions(db,transactions);
+		
+	}
+	
+	public List<TransactionModel> getTransactions(List<Integer> transactionIds) {
+
+		return MongoDB.getTransactions(db,transactionIds);
+		
+	}
+
+	public String getMail(String user) {
+		return (String)MongoDB.getValueFromDataBase(db, "users", "_id", new ObjectId(user), "mail");
+		
+	}
+	
+	public String getUserName(String user) {
+		return (String)MongoDB.getValueFromDataBase(db, "users", "_id", new ObjectId(user), "name");
+		
+	}
+
+	public void checkFeedbacksForDoubleEntry() {
+		MongoDB.cleanDoubleFeedbacksEntries(db);
+		
+	}
+
+	public List<Integer> checkFeedbacksForDoubleEntry(FeedbackModel temp) {
+		return MongoDB.checkDuplicateFeedback(db, temp);
+	}
+
+	public Geometry getRouteGeometry(int id) {
+		return MongoDB.getRouteGeometry(db,id);
+	}
+
+
 }

@@ -66,4 +66,14 @@ public class MailUser {
 			e.printStackTrace();
 		}
 	}
+	
+	public static void createThankYouMail(String mail,String username,String action,int points){
+		try {
+			String content="Gracias "+username+" por tu contribución: "+action+" .</br> Está confirmado y va estar en el sistema proximamente</br>.Has ganaste "+points +" puntos</br></br>Vamos a conquistar la ciudad a través de conocimiento </br> Saludos Martin";
+			writeMail(mail,content, "ChilanGo! Gracias por tu contribución");
+		} catch (MessagingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 }  
